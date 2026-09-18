@@ -1,0 +1,37 @@
+name: phase4-assignment-notification-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  assignment-notification-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Unassign amir-hasan666 from issue 3
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.removeAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 3,
+              assignees: ['amir-hasan666'],
+            })
+            core.notice(`unassign_at=${new Date().toISOString()}`)
+      - name: Wait about 10 seconds
+        run: sleep 10
+      - name: Assign amir-hasan666 to issue 3
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 3,
+              assignees: ['amir-hasan666'],
+            })
+            core.notice(`reassign_at=${new Date().toISOString()}`)
