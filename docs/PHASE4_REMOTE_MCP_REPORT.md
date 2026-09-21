@@ -1,5 +1,7 @@
 # Phase 4 Remote MCP（只读验证）证据报告
 
+> **HISTORICAL：** 本文所有 `trycloudflare.com` hostname 都只对应 2026-09-18/20 的当次 Quick Tunnel 证据。Phase 6 正式入口已固定为 `https://grokbuddy.amirhasan.top`，不得复用本文临时 hostname。
+
 日期：2026-09-20（Asia/Shanghai）。本报告只对应 Human 本轮明确授权的 Remote MCP 验证；与既有 [Phase 4 Grok Protocol 报告](PHASE4_REPORT.md) 分开。未进入 Phase 5/6，未创建 Grok Connector、运行 Routine、恢复 poller、连接 Real Grok/ACP/WorkBuddy wake-up，未更改 GitHub PR/分支或 Cloudflare 长期配置。
 
 ## 范围与起点

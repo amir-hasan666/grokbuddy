@@ -84,6 +84,8 @@ $env:GITHUB_COMMENT_TOKEN = '<fine-grained token injected by the operator>'
 
 [.env.example](.env.example) 是配置示例，当前库**不读取 .env**。本地运行使用 `Settings`、显式数据目录；真实 GitHub Comment 和 Grok Reviewer 写回只由显式 CLI/Composite 参数及独立进程环境 Secret 启用。Secret 或账号能力缺失时不能宣称 Grok 执行。
 
+Phase 6 正式公网入口固定为 `https://grokbuddy.amirhasan.top`；仓库运行配置见 [grokbuddy.service.json](config/grokbuddy.service.json)，Windows 服务、任务、健康检查、恢复与卸载命令见 [Phase 6 Operations Runbook](docs/PHASE6_OPERATIONS_RUNBOOK.md)。历史 Phase 3.5/4/5 报告中的 `trycloudflare.com` 只保留为当次证据，不得写回正式默认路径。
+
 | 配置组 | 设计默认值 / 用途 |
 |---|---|
 | HUB_MODE / REVIEWER_ADAPTER | 默认 local / mock；正式 Grok Adapter 需显式 B route、独立 Secret 和一次性 dispatch 启用，当前未试跑 |

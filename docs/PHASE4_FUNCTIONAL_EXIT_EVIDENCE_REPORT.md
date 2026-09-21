@@ -1,5 +1,7 @@
 # Phase 4 Functional Exit 证据报告
 
+> **HISTORICAL：** 本文 `trycloudflare.com` PublicBase 只对应当次试跑。Phase 6 正式入口为 `https://grokbuddy.amirhasan.top`。
+
 ## 当前结论（2026-09-20，Asia/Shanghai）
 
 **Phase 4 Functional Exit: PASS**

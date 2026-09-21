@@ -33,6 +33,10 @@
 | PHASE4-REMOTE-MCP-PUBLIC | 仅经当时已运行且指向 8788 的 Quick Tunnel/现有 route 做 JSON-response Streamable HTTP 公网验证 | REMOTE PASS；2026-09-20 11:53 当次现有 Quick Tunnel 已实测，结束后恢复原 webhook；见 [Phase 4 Remote MCP 报告](docs/PHASE4_REMOTE_MCP_REPORT.md)，不代表当前 hostname 持续有效 |
 | PHASE4-GROK-ADAPTER-LOCAL | 正式 B 路由、GitHub Comment 请求载体、认证 Reviewer 回写、旧 RR 超时与新 RR 恢复路径、离线回归 | LOCAL PASS；见 [Grok Adapter 报告](docs/PHASE4_GROK_ADAPTER_REPORT.md)；真实试跑仍缺专用 Secret 和当前账号能力证据 |
 
+| PHASE6-STEP6.8-NAMED-TUNNEL-PUBLICBASE | Named Tunnel `grokbuddy`、固定 PublicBase `https://grokbuddy.amirhasan.top`、route 到 `http://localhost:8788` | PASS（Human 已验证并冻结）；历史 Quick Tunnel 不作为本 Gate 证据 |
+| PHASE6-STEP6.9-AUTOSTART-OBSERVABILITY | Quick Tunnel 清零、cloudflared 自动服务、Hub 自启、health/readiness、重启证据 | PARTIAL；见 [Pack E 收尾报告](docs/PHASE6_PACK_E_WRAP_REPORT.md)；Hub 任务凭据上下文与重启证据未闭合 |
+| PHASE6-PACK-E | 6.8 + 6.9 + 仓外 Webhook/Connector 固定 URL | NOT PASS；等待 Human 外站修改、受保护 Secret 注入决策和重启验收 |
+
 以上分离 Gate 不是代理自行豁免。Codex 路由中的历史 `MCP_FAIL` 与 WorkBuddy 本机客户端能力分开记录；WorkBuddy task 落库证据也不放行真实 Grok/GitHub。Phase 1 退出验证见 [PHASE1_REPORT](docs/PHASE1_REPORT.md)，Phase 2 证据见 [PHASE2_REPORT](docs/PHASE2_REPORT.md)，Phase 3 本地证据见 [PHASE3_REPORT](docs/PHASE3_REPORT.md)。
 
 ## 分期

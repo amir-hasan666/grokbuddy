@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -32,13 +33,45 @@ def _parser():
         "--public-host",
         action="append",
         default=[],
-        help="Existing tunnel hostname allowed by MCP DNS-rebinding protection",
+        help="Additional public hostname allowed by MCP DNS-rebinding protection",
+    )
+    parser.add_argument(
+        "--public-base-url",
+        default=os.environ.get("PUBLIC_BASE"),
+        help="Stable HTTPS public origin; defaults to PUBLIC_BASE",
     )
     parser.add_argument("--actor", default="builder")
     parser.add_argument("--grok-reviewer-actor", help="Registered Reviewer B actor; enables dedicated ingress")
     parser.add_argument("--grok-public-base-url", help="HTTPS origin for Reviewer request pointers")
     parser.add_argument("--grok-token-env", default="GROKBUDDY_GROK_REVIEWER_TOKEN")
     return parser
+
+
+def _public_configuration(args):
+    public_hosts = list(args.public_host)
+    public_base_url = args.public_base_url
+    if public_base_url:
+        parsed = urlsplit(public_base_url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise HubError("PUBLIC_BASE must be an HTTPS origin without path, query, or credentials")
+        public_base_url = f"https://{parsed.hostname}"
+        if parsed.hostname not in public_hosts:
+            public_hosts.append(parsed.hostname)
+    if args.grok_public_base_url:
+        legacy_base = args.grok_public_base_url.rstrip("/")
+        if public_base_url and legacy_base != public_base_url:
+            raise HubError("Grok public base URL conflicts with PUBLIC_BASE")
+        public_base_url = legacy_base
+    return public_hosts, public_base_url
 
 
 def main(argv=None):
@@ -56,11 +89,12 @@ def main(argv=None):
             raise HubError(
                 f"MCP token environment variable {args.mcp_token_env} is not set"
             )
+        public_hosts, public_base_url = _public_configuration(args)
         runtime = LocalRuntime(args.runtime_dir, args.contracts_dir)
         grok_app = None
         if args.grok_reviewer_actor:
             reviewer_token = os.environ.get(args.grok_token_env)
-            if not reviewer_token or not args.grok_public_base_url:
+            if not reviewer_token or not public_base_url:
                 raise HubError("Grok Reviewer token and public HTTPS origin are required")
             if reviewer_token in (mcp_token, webhook_secret):
                 raise HubError("Grok Reviewer token must be independent of existing endpoint secrets")
@@ -71,13 +105,13 @@ def main(argv=None):
             adapter = GrokBotReviewerAdapter(
                 runtime.db, None, runtime.clock, reviewer_actor_id=reviewer['id'],
                 agent_id=reviewer['agent_id'], server_id=reviewer['server_id'],
-                public_base_url=args.grok_public_base_url)
+                public_base_url=public_base_url)
             grok_app = GrokReviewerApplication(runtime, adapter, reviewer_token)
         application = create_composite_application(
             runtime,
             webhook_secret,
             mcp_token,
-            public_hosts=args.public_host,
+            public_hosts=public_hosts,
             actor_id=args.actor,
             grok_reviewer_app=grok_app,
         )

@@ -7,20 +7,20 @@
 1. 在 Grok Bot 桌面客户端确认 `workbuddy审核员` 的 agentId=`4335c388-584c-434e-b14e-13964b176b6e`、serverId=`3504754`，核对该 Bot 对目标 PR 的实际权限及能否按单个 request 指针工作。确认当前账号的 PR Comment notification 或 Routine trigger；若不支持，使用明确的一次性 Bot 任务，不假定 Comment 自动唤醒。
 2. 确认 Reviewer B 的实际账号/凭据与 Builder A 独立。Hub 中的 `grok-bot:3504754:4335c388-584c-434e-b14e-13964b176b6e` 目前是按 Human 给出的 ID 注册的映射，**尚非平台身份实测**。Bot 名称和自报 run ID 不能单独证明身份。
 3. 安全配置专用 `GROKBUDDY_GROK_REVIEWER_TOKEN`，只提供给 Reviewer B 与本机 composite 服务；不得粘贴到聊天、PR、命令行或日志。它必须不同于 `GROKBUDDY_MCP_TOKEN` 和 `GITHUB_WEBHOOK_SECRET`。当前该 token 缺失，未启动写回面。
-4. 核对 PR #4 仍 Open、head 为 `phase4-step6-probe`，确认当前 HTTPS tunnel hostname 和目标端口。只使用已验证的现有 tunnel；不能沿用历史 Quick Tunnel hostname。
+4. 核对 PR #4 仍 Open、head 为 `phase4-step6-probe`，并确认固定 PublicBase 为 `https://grokbuddy.amirhasan.top`、目标端口为 8788。正式路径只使用 Named Tunnel；禁止沿用历史 Quick Tunnel hostname。
 5. Human 为恢复后的新审核给出未来 UTC deadline、Final round budget、恢复原因和稳定 idempotency key。旧 `RR-a5b8e603-58f9-46b6-a4f5-f6927fd18ec7` 已经 `TIMED_OUT`，绝不能把其结果改成 Grok 完成。
 
 ## 2. 启动独立写回面
 
-在可读取上述 Secret 的受控进程环境中，先安全切换原 8788 webhook listener，再启动同端口 composite；`<CURRENT_HOST>` 替换为本轮实际 hostname，不带 scheme：
+在可读取上述 Secret 的受控进程环境中，先安全切换原 8788 webhook listener，再以固定 PublicBase 启动同端口 composite：
 
 ```powershell
+$env:PUBLIC_BASE = 'https://grokbuddy.amirhasan.top'
 .\.venv-phase0\Scripts\python.exe scripts\grokbuddy_composite.py `
   --runtime-dir var\github-manual `
   --host 127.0.0.1 --port 8788 `
-  --public-host <CURRENT_HOST> `
-  --grok-reviewer-actor grok-reviewer-b `
-  --grok-public-base-url https://<CURRENT_HOST>
+  --public-base-url $env:PUBLIC_BASE `
+  --grok-reviewer-actor grok-reviewer-b
 ```
 
 复核 `/health=200`、原 `/webhooks/github` 可达、`/mcp` 仍仅 5 个只读工具；`/reviewer/*` 无/错 B token 为 401。只把 B token 经受控 Secret 注入到 Bot 环境，不写入请求 Comment。当前 Composite 不启用 B token 时 `/reviewer/*` 返回 404。
@@ -47,7 +47,7 @@
 ```powershell
 .\.venv-phase0\Scripts\python.exe scripts\grokbuddy_grok.py --runtime-dir var\github-manual dispatch-once `
   --reviewer-actor-id grok-reviewer-b `
-  --public-base-url https://<CURRENT_HOST>
+  --public-base-url $env:PUBLIC_BASE
 ```
 
 该命令只领取 B 的 outbox，查询 PR Comment marker 后按需 CREATE 一条短请求指针；不会领取旧 Mock RR。`SENT` 证明 Comment 载体已接受。若为 `UNKNOWN`，先人工查 marker 和 GitHub 回执，**不得盲目重发**。若当前 Grok Bot 账号无法按 PR Comment 唤醒，Human 在 `workbuddy审核员` 中发起一次性真实任务，提供新 RR 指针与禁令；记录 Bot run 证据，不把手工转述当自动 trigger 通过。
