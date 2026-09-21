@@ -1,5 +1,31 @@
 # WorkBuddy 接入验证与设计
 
+## Phase 6 trigger ingress 接线（2026-09-21）
+
+6.17-B 的现场失败不是 Hub 守卫缺陷：当前用户级 `mcp.json` 只有 `grokbuddy-hub`（固定 `builder`）和 `grokbuddy-worker`（固定 `workbuddy-worker`）。普通 Hub 的 `create_task` 即使收到调用方提供的 `trigger_evidence`，也必须因 actor 不是 `workbuddy-ingress` 而返回 `PERMISSION_FAILURE`；Worker surface 根本不暴露建单工具。
+
+仓内现已增加第三个、独立且最小的 stdio surface：`grokbuddy-ingress`。它只列出 `create_triggered_task`，固定绑定 `workbuddy-ingress`，不接受 actor 或签名作为工具参数。工具接收当前消息的 provenance segments、由 WorkBuddy Skill 运行时注入的 session ID 和稳定 idempotency key；connector 进程签发 HMAC evidence 后，再调用原 `ClientGateway → TaskService.create_task`，Hub 在创建事务里继续执行 6.1 的 principal、签名、正文 hash、exact phrase、offset、时效和活动 conversation 双检。普通 Hub/Worker 的工具和权限没有放宽。
+
+WorkBuddy 5.5.6 当前实际能力与边界：
+
+| 能力 | 当次证据 | 对 ingress 的影响 |
+| --- | --- | --- |
+| `stdio` / `sse` / `http` 与 `mcpServers` | 本机 5.5.6、用户配置、[官方 MCP 文档](https://cloud.tencent.com/document/product/1831/137039) | 采用与现有 Hub/Worker 一致的 stdio 子进程。 |
+| `command` / `args` / `env` / `defer_loading` / tool override | 官方文档和本机配置 shape | 无 Secret 配置样例可直接合并；点火工具保持非延迟，避免模型继续选择普通 Hub 建单。 |
+| 当前 session ID | [官方 Skills 文档](https://cloud.tencent.com/document/product/1831/137020)说明 `${CODEBUDDY_SESSION_ID}` 会在 Skill 运行时替换为当前会话 ID | skill 必须把替换后的值原样传给 ingress；未展开的占位符会被拒绝。同一 conversation 即使 stdio 重连也继续使用同一 Hub conversation ID。 |
+| 当前消息 immutable ID / provenance 自动注入 custom MCP | 官方自定义 MCP schema 未给出 native user-message ID 或 provenance 注入字段；本机配置也没有 | message/turn ID 由 runtime session ID + 每消息稳定 idempotency key 派生；segments 由 skill 按当前消息传入并由 ingress/Hub 两次解析。它仍需 Human B 真机验证，不把本地工具调用冒充来源证明。 |
+| message provenance segmentation | 由 WorkBuddy 技能传入；Hub 仍自行解析 fenced/indented/inline code 和 Markdown quote | skill 必须把粘贴文档、附件、工具输出标成排除 source；不能把它们改标成 `user_body`。 |
+
+### WorkBuddy 配置步骤（Human 执行）
+
+1. 在 Windows Credential Manager 为当前登录用户新增 Generic Credential Target `GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY`，值不少于 32 UTF-8 bytes；它必须与 Hub 使用的同名 Key 完全一致。不要把值贴进聊天、命令历史、`mcp.json`、Git、日志或报告。
+2. 运行 `scripts/windows/Test-GrokBuddyCredentialStore.ps1`；输出只能包含四个 Target 的 `PRESENT`。按既有运维 runbook 让 Hub 在下一次受控启动时读取新增 Target；PublicBase 继续固定为 `https://grokbuddy.amirhasan.top`。
+3. 把 [workbuddy-ingress-mcp.example.json](examples/workbuddy-ingress-mcp.example.json) 中的单个 `grokbuddy-ingress` 条目合并到 `C:\Users\22241\.workbuddy\mcp.json`，保留现有 Hub/Worker 原值。样例通过 `Start-GrokBuddyIngressMcp.ps1` 从 Credential Manager 读取 Key，JSON 中没有 Secret。
+4. 将 [trigger skill](workbuddy-skills/grokbuddy-trigger-ingress/SKILL.md) 安装到 WorkBuddy 用户 skills 目录并刷新/重启 WorkBuddy。确认 Skill 中的 `${CODEBUDDY_SESSION_ID}` 在执行时被替换；MCP 管理界面中对 `grokbuddy-worker` 点“信任”（若尚未），并对新 `grokbuddy-ingress` 完成首次信任。
+5. 确认 `grokbuddy-ingress` 只显示 `create_triggered_task`。无精确短语时不调用；命中时只调用该工具，不调用 `grokbuddy-hub.create_task`。失败时不得回退到普通 create、Quick Tunnel、人工 once 或粘贴 findings。
+
+`grokbuddy-ingress` 是本机 stdio 点火面，不经 PublicBase；固定 PublicBase 仍用于长期 Hub health/read-only Remote MCP/Reviewer 路径。仓内实现与本地测试完成不等于 WorkBuddy 真机已加载连接器，也不等于 6.17 PASS。
+
 ## 当前结论（2026-09-17）
 
 WorkBuddy 5.5.6 的自定义 MCP transport 已确认，选择 **stdio**，不是猜测：
@@ -18,7 +44,7 @@ WorkBuddy 5.5.6 的自定义 MCP transport 已确认，选择 **stdio**，不是
 | 类别 | 结论 | 证据边界 |
 |---|---|---|
 | CONFIRMED transport | WorkBuddy 5.5.6 支持 stdio/sse/http，stdio 为 CLI 默认 | 本机 `--help` + 官方文档 + 实际 JSON shape |
-| LOCAL PASS | Hub Server 可列出精确 11 tools；legacy handshake、stdio 子进程 `create_task`、PENDING/query 分离、跨进程幂等重放通过 | 官方 Python client；不是 WorkBuddy 客户端实调 |
+| LOCAL PASS | Hub Server 当前可列出精确 12 tools；legacy handshake、stdio 子进程 `create_task`、PENDING/query 分离、跨进程幂等重放通过 | 官方 Python client；不是 WorkBuddy 客户端实调 |
 | PARTIAL WorkBuddy load | `--mcp-config` 启动时创建了 Hub runtime/schema/本地主体，证明命令与配置至少进入了 Server 启动路径 | tasks/audit 均为 0；不能证明 tools/list 或 tools/call 完成 |
 | USER-REPORTED + LOCAL DB CONFIRMED | WorkBuddy 真实 `create_task` | 用户提供 `TASK-12d16e55-d3ee-4d84-8dc2-d6594c965d56`；本地 Hub DB 有单一 Task 与一次 TASK_CREATED Audit。WorkBuddy UI/网络 trace 未独立抓取 |
 | OUT OF SCOPE | Grok、ACP、真实 GitHub 部署 | Phase 3 仅本地 Webhook/Comment mock；未连接外部服务 |

@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "grokbuddy-ingress": {
+      "type": "stdio",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "D:\\Codex\\grokbuddy\\scripts\\windows\\Start-GrokBuddyIngressMcp.ps1",
+        "-RuntimeDir",
+        "D:\\Codex\\grokbuddy\\var\\workbuddy-mcp",
+        "-ContractsDir",
+        "D:\\Codex\\grokbuddy\\docs\\contracts"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      },
+      "defer_loading": false,
+      "tools": {
+        "create_triggered_task": {
+          "defer_loading": false
+        }
+      }
+    }
+  }
+}

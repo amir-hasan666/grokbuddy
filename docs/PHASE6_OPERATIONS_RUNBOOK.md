@@ -6,7 +6,7 @@
 
 - 非敏感运行配置：`config/grokbuddy.service.json`。
 - 正式 Secret Source 是当前登录用户的 Windows Credential Manager Generic Credential（`CRED_TYPE_GENERIC`）。`Get-GrokBuddyCredential.ps1` 只通过 `CredReadW` 读取，并始终用 `CredFree` 释放原生缓冲区。
-- 三个固定 Target 为 `GrokBuddy/GITHUB_WEBHOOK_SECRET`、`GrokBuddy/GROKBUDDY_MCP_TOKEN`、`GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN`。可读且非空才输出 `PRESENT`；任一项 missing、empty 或 unreadable 都 fail closed，不启动 Hub。
+- 四个固定 Target 为 `GrokBuddy/GITHUB_WEBHOOK_SECRET`、`GrokBuddy/GROKBUDDY_MCP_TOKEN`、`GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN`、`GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY`。Trigger Source Key 还必须不少于 32 UTF-8 bytes；任一项 missing、empty、过短或 unreadable 都 fail closed，不启动 Hub。
 - `Start-GrokBuddyHub.ps1` 只把值注入 launcher/Hub 的 Process 环境。禁止 `setx`，禁止 User/Machine 环境持久化，禁止把值写入 JSON、任务参数、Git、日志或报告。
 - `var/service/hub-secrets.clixml` 被 Git 忽略并保留，但已退出正式启动链路。安装、启动和卸载脚本均不读取、覆盖或删除它。
 
@@ -16,7 +16,7 @@
 .\scripts\windows\Test-GrokBuddyCredentialStore.ps1
 ```
 
-成功时只显示三个 Target 的 `PRESENT`。
+成功时只显示四个 Target 的 `PRESENT`。
 
 ## 2. 清理 Quick Tunnel
 
@@ -40,7 +40,7 @@ sc.exe qc cloudflared
 
 ## 3. Hub 任务安装、启动与卸载
 
-在拥有上述三个 Generic Credential 的当前 Windows 用户上下文中安装：
+在拥有上述四个 Generic Credential 的当前 Windows 用户上下文中安装：
 
 ```powershell
 .\scripts\windows\Install-GrokBuddyHubTask.ps1
@@ -49,6 +49,8 @@ sc.exe qc cloudflared
 任务触发器是当前用户登录，失败自动按 1 分钟间隔重启最多 10 次。它不等于 LocalSystem 开机前服务；验收口径是“机器重启并登录该用户后自动监听”。
 
 `Start-GrokBuddyHub.ps1` 是长期 launcher：它以前台子进程方式持有 Hub。因此健康运行时任务应为 `Running`，`LastTaskResult=267009 (0x41301 / SCHED_S_TASK_RUNNING)` 是“任务仍在运行”，不应机械要求为 `0`。只有 launcher 已退出时，才把最终退出码作为诊断依据。
+
+WorkBuddy 专用 trigger ingress 不把 Key 写进 `mcp.json`。其 stdio 配置调用 `Start-GrokBuddyIngressMcp.ps1`；该 wrapper 从相同的 `GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY` Target 读取并只注入 ingress 子进程。仓内无 Secret 的配置样例见 [workbuddy-ingress-mcp.example.json](examples/workbuddy-ingress-mcp.example.json)。
 
 停止并卸载任务：
 

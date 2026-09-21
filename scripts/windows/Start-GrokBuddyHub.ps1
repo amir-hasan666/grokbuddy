@@ -34,13 +34,20 @@ if (-not (Test-Path -LiteralPath $python)) {
     throw 'No repository Python environment was found.'
 }
 function Set-ProcessSecret {
-    param([string]$Name, [Security.SecureString]$Value)
+    param(
+        [string]$Name,
+        [Security.SecureString]$Value,
+        [int]$MinimumUtf8Bytes = 1
+    )
     if ($null -eq $Value) {
         throw "Required protected value is missing: $Name"
     }
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
     try {
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        if ([Text.Encoding]::UTF8.GetByteCount($plain) -lt $MinimumUtf8Bytes) {
+            throw "Required protected value is too short: $Name"
+        }
         [Environment]::SetEnvironmentVariable($Name, $plain, 'Process')
     }
     finally {
@@ -58,16 +65,23 @@ $credentialMappings = [ordered]@{
     'GrokBuddy/GITHUB_WEBHOOK_SECRET' = 'GITHUB_WEBHOOK_SECRET'
     'GrokBuddy/GROKBUDDY_MCP_TOKEN' = 'GROKBUDDY_MCP_TOKEN'
     'GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN' = 'GROKBUDDY_GROK_REVIEWER_TOKEN'
+    'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY' = 'GROKBUDDY_TRIGGER_SOURCE_KEY'
 }
 foreach ($target in $credentialMappings.Keys) {
     $credential = $null
     try {
         $credential = Get-GrokBuddyCredential -Target $target
-        Set-ProcessSecret -Name $credentialMappings[$target] -Value $credential
+        $minimumBytes = if ($target -eq 'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY') { 32 } else { 1 }
+        Set-ProcessSecret -Name $credentialMappings[$target] -Value $credential -MinimumUtf8Bytes $minimumBytes
         Add-Content -LiteralPath $credentialLog -Value "$(Get-Date -Format o) PRESENT: $target" -Encoding UTF8
     }
     catch {
-        $safeMessage = "credential target missing: $target"
+        $safeMessage = if ($_.Exception.Message -like '*too short*') {
+            "credential target invalid: $target"
+        }
+        else {
+            "credential target missing: $target"
+        }
         Add-Content -LiteralPath $credentialLog -Value "$(Get-Date -Format o) $safeMessage" -Encoding UTF8
         exit 1
     }

@@ -1,4 +1,4 @@
-PHASE6-STEP6.17-TRIGGER-ISOLATION: WAITING HUMAN / WORKBUDDY
+PHASE6-STEP6.17-TRIGGER-ISOLATION: WAITING HUMAN RETEST
 
 # Phase 6 Step 6.17 — Trigger Isolation Evidence
 
@@ -6,11 +6,11 @@ PHASE6-STEP6.17-TRIGGER-ISOLATION: WAITING HUMAN / WORKBUDDY
 
 ## 1. 结论与边界
 
-本报告已准备只读 Hub 证据探针和 Human 真机执行清单，但 **Human 尚未在同一 WorkBuddy conversation 中完成并回填 A → B → C 证据**，因此当前只能是 `WAITING HUMAN / WORKBUDDY`，不能判为 PASS。
+Human 已在 WorkBuddy 5.5.6 同一 conversation 完成 Case A，并报告 `PASS`；Case B 发送精确短语后，代理错误调用普通 `grokbuddy-hub.create_task`，Hub 返回 `PERMISSION_FAILURE: Dedicated WorkBuddy ingress principal required`。B-before 与失败后的 B-after 为零 mutation，证明 6.1 fail closed 未被破坏，但 B 没有创建活动 Task，因此不能判为 PASS。仓内现已补齐独立 ingress、Credential wrapper、WorkBuddy 配置/skill 和本地测试；仍须由 Human 重跑 B→C，当前结论为 `WAITING HUMAN RETEST`。
 
 6.17 只验证 D1–D3 的 Trigger Isolation：无精确触发词不创建、不 sticky；有合格触发词只创建一个带可信 `trigger_evidence` 的活动 GrokBuddy Task；B 的 Task 终态后，普通消息仍不触发。本步不是流程审核或完整任务闭环。
 
-`6.17 PASS ≠ 6.19 ≠ 6.20`。本轮未开始 6.19/6.20，未修改 Trigger 合同、状态机或 Plan≤2 / Final≤3，未恢复 Quick Tunnel，未发 WorkBuddy 消息，未启动 Hub，未写 Hub DB，未 dispatch RR。
+`6.17 PASS ≠ 6.19 ≠ 6.20`。本轮未开始 6.19/6.20，未修改 Trigger 合同、状态机或 Plan≤2 / Final≤3，未恢复 Quick Tunnel，未发 WorkBuddy 消息，未启动真实 Hub，未写目标 `var/workbuddy-mcp/hub.db`，未 dispatch RR；测试只写 pytest 隔离目录。
 
 ## 2. 前置证据
 
@@ -24,7 +24,17 @@ PHASE6-STEP6.17-TRIGGER-ISOLATION: WAITING HUMAN / WORKBUDDY
 | 固定 PublicBase 当前探测 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\Test-GrokBuddyRuntime.ps1` | exit 1；`curl: (7) Failed to connect to grokbuddy.amirhasan.top:443`；CURRENT PUBLIC ROUTE NOT VERIFIED |
 | Hub DB query-only smoke | `snapshot --label harness-smoke-not-a-case`，默认 `var/github-manual/hub.db` | PASS；`query_only=true`；Task=3，活动 Task=0，活动 GrokBuddy Task=0；探针前后 `hub.db` mtime 未变 |
 
-## 3. 只读探针
+## 3. 现场 Case A/B 与根因
+
+| Case | 现场事实 | 判定 |
+| --- | --- | --- |
+| A | Human 在同一 WorkBuddy conversation 发送无触发词消息；6.17 compare 为 PASS。 | PASS（Human 报告；不由本地夹具替代） |
+| B | Human 发送 `启用grokbuddy流程，帮我列一个三步的今日待办提纲。`；WorkBuddy 代理选择 `grokbuddy-hub.create_task`；Hub 返回 `PERMISSION_FAILURE: Dedicated WorkBuddy ingress principal required`；B-before vs B-after-failed-ingress 零 mutation。 | BLOCKED（根因为缺少专用 ingress connector + evidence issuer） |
+| C | B 尚未成功创建/终结 Task。 | NOT RUN |
+
+现有两个连接器的职责不能填补该缺口：`grokbuddy-hub` 固定为普通 `builder`，不得通过参数冒充 ingress；`grokbuddy-worker` 只负责领取、上传、进度和完成 Worker 子生命周期，首次信任它也不会自动获得建单权。正确修复必须增加第三个受限入口，而不是放宽 `TaskService.create_task`。
+
+## 4. 只读探针
 
 探针：`scripts/windows/Test-GrokBuddyTriggerIsolation.py`
 
@@ -44,9 +54,18 @@ $Harness = '.\scripts\windows\Test-GrokBuddyTriggerIsolation.py'
 
 每个输出文件默认不可覆盖；若文件已存在，请换一个带时间戳的新文件名，保留原始证据。
 
-## 4. Human + WorkBuddy 真机执行清单
+## 5. Human + WorkBuddy 真机执行清单
 
 Owner：**Human + WorkBuddy**。Codex 不代发消息。A、B、C 必须在同一 WorkBuddy conversation 中按顺序执行；每条消息前先完成 before snapshot，WorkBuddy 回复后立即完成 after snapshot。
+
+重跑 B 前先由 Human 完成：
+
+1. WorkBuddy MCP 管理中对 `grokbuddy-worker` 点“信任”（若尚未）。
+2. 按 [WorkBuddy 集成说明](WORKBUDDY_INTEGRATION.md) 在 Windows Credential Manager 配置与 Hub 一致、至少 32 UTF-8 bytes 的 `GROKBUDDY_TRIGGER_SOURCE_KEY`；不得把值贴进聊天、JSON、Git 或日志。
+3. 合并无 Secret 的 [grokbuddy-ingress 配置样例](examples/workbuddy-ingress-mcp.example.json)，安装 [trigger skill](workbuddy-skills/grokbuddy-trigger-ingress/SKILL.md)，刷新/重启 WorkBuddy，并对新 ingress 完成首次信任。
+4. 确认 `grokbuddy-ingress` 只暴露 `create_triggered_task`。精确命中时必须调用它；禁止调用普通 `grokbuddy-hub.create_task` 作为替代或 fallback。
+
+Case A 的既有 PASS 不需要为了安装连接器而改写；正式收口仍需把其非 Secret 原始摘要与本轮 B/C 证据一起归档。
 
 ### Case A — 无触发词，0 mutation
 
@@ -99,12 +118,13 @@ Owner：**Human + WorkBuddy**。Codex 不代发消息。A、B、C 必须在同�
 
 期望：与 A 相同，所有 Hub 表 0 mutation。
 
-## 5. A/B/C 证据表（Human 回填后再改结论）
+## 6. A/B/C 证据表（Human 重跑后再改结论）
 
 | Case | Human 消息 | before snapshot | after snapshot | compare / Task 证据 | 判定 |
 | --- | --- | --- | --- | --- | --- |
-| A | `帮我写一句问候语，不要启用任何特殊流程。` | `[未运行]` | `[未运行]` | `[未运行]` | NOT RUN |
-| B | `启用grokbuddy流程，帮我列一个三步的今日待办提纲。` | `[未运行]` | `[未运行]` | `task_id=[未运行]`；`conversation_id=[未运行]`；trigger evidence `[未运行]` | NOT RUN |
+| A | `帮我写一句问候语，不要启用任何特殊流程。` | `[Human 已运行；待粘贴非 Secret 摘要]` | `[Human 已运行；待粘贴非 Secret 摘要]` | `CASE A: PASS`（Human 报告） | PASS |
+| B（首次） | `启用grokbuddy流程，帮我列一个三步的今日待办提纲。` | `[Human 已运行；待粘贴非 Secret 摘要]` | `[失败后已运行；零 mutation]` | `PERMISSION_FAILURE: Dedicated WorkBuddy ingress principal required`；无 Task | BLOCKED（历史现场） |
+| B（ingress 修复后重跑） | 同上 | `[未运行]` | `[未运行]` | `task_id=[未运行]`；`conversation_id=[未运行]`；trigger evidence `[未运行]` | NOT RUN |
 | C | `再写一句谢谢，普通回复即可。` | `[未运行]` | `[未运行]` | B Task 终态 `[未运行]`；0 mutation `[未运行]`；active context 0 `[未运行]` | NOT RUN |
 | B′（可选） | 触发短语仅在 fenced code 或 Markdown quote | `[未运行]` | `[未运行]` | `[未运行]` | NOT RUN |
 
@@ -124,17 +144,21 @@ Owner：**Human + WorkBuddy**。Codex 不代发消息。A、B、C 必须在同�
 
 同时保留实际 Asia/Shanghai 日期和 `6.17 PASS ≠ 6.19 ≠ 6.20` 声明。
 
-## 6. 本地夹具验证与已知限制
+## 7. Ingress 修复、本地验证与已知限制
 
-- `tests/test_trigger_isolation_harness.py` 只验证快照 diff 的 A/B/B′/C 判定和行内容变更检测；它不生成 WorkBuddy 签名、不调用真实 ingress，不是 6.17 PASS 证据。
-- 本地命令 `python -m pytest -q tests/test_trigger_isolation_harness.py` 为 `5 passed`。真实 Hub query-only smoke 成功；用**同一份** smoke snapshot 自比得到 `CASE A: PASS / changed_tables=(none)`，这只验证 CLI 与序列化路径，绝不是 Human A 用例证据。
-- 最终本地回归：`python -m py_compile scripts/windows/Test-GrokBuddyTriggerIsolation.py tests/test_trigger_isolation_harness.py` PASS；`python -m pytest -q` 为 `778 passed in 134.55s`；`git diff --check` PASS。所有 pytest 均是本地/隔离证据，不替代真机签发。
-- 本轮新增文件仅为 `scripts/windows/Test-GrokBuddyTriggerIsolation.py`、`tests/test_trigger_isolation_harness.py`、`docs/PHASE6_STEP6_17_TRIGGER_ISOLATION_REPORT.md`。smoke JSON 位于 Git ignored 的 `var/evidence/phase6-step6.17/`，未纳入提交。
-- 真 WorkBuddy 是否将同一 conversation、当前用户消息 provenance 和签发证据正确送达 Hub，仍为 `ENVIRONMENT_VALIDATION_REQUIRED`，只能由上述 Human 真机步骤闭合。
-- 固定 PublicBase 在本次准备时的有界探测未连通；原因未在 6.17 范围内诊断或修复。若 Human/WorkBuddy 的实际签发路径依赖该入口，应先按既有 Pack E 运维 runbook 恢复并重新保存当次只读 health/ready 证据，再执行 A/B/C。
+- 新增 `src/grokbuddy/interfaces/ingress_mcp.py` 与 `scripts/grokbuddy_ingress_mcp.py`：固定 `workbuddy-ingress`，只暴露 `create_triggered_task`；工具不接受 actor/signature/raw evidence。
+- 新增 `scripts/windows/Start-GrokBuddyIngressMcp.ps1`：从 Windows Credential Manager Target `GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY` 读取 Key，只注入子进程；`Start-GrokBuddyHub.ps1` 从同一 Target 注入 Hub。Key 少于 32 UTF-8 bytes 时 fail closed。
+- 新增 [无 Secret MCP 样例](examples/workbuddy-ingress-mcp.example.json)和 [WorkBuddy trigger skill](workbuddy-skills/grokbuddy-trigger-ingress/SKILL.md)。普通 Hub/Worker、Remote MCP 五个只读工具和 6.1 双检没有放宽。
+- 新增 `tests/test_phase6_workbuddy_ingress.py`：覆盖单工具 surface、合格点火、幂等重放、普通/code fence/quote/pasted 排除、缺 Key 和未展开 session placeholder 零 mutation，以及真实 stdio 子进程 handshake/call。
+
+- `tests/test_trigger_isolation_harness.py` 只验证快照 diff 的 A/B/B′/C 判定和行内容变更检测；它不生成 WorkBuddy 签名、不调用真实 ingress，不是 6.17 PASS 证据。其既有单项结果为 `5 passed`，真实 Hub query-only smoke 与同一份 snapshot 自比只验证 CLI/序列化路径。
+- 新 ingress 聚焦测试与 6.1 trigger gate 合跑为 `23 passed`，包括同一幂等键被用于变化消息时 `CONFLICT`、未展开 session placeholder 拒绝且均零 mutation；Hub/Worker/Remote MCP 接口回归为 `46 passed`；最终 `python -m pytest -q` 为 `787 passed in 154.55s`。`compileall`、三个 PowerShell 文件 parser check、example JSON parse、`git diff --check` 均 PASS；合同检查 `validate_phase0.py --allow-core` 为 `219/219 passed`。
+- 本轮 ingress 新增文件为 `src/grokbuddy/interfaces/ingress_mcp.py`、`scripts/grokbuddy_ingress_mcp.py`、`scripts/windows/Start-GrokBuddyIngressMcp.ps1`、`tests/test_phase6_workbuddy_ingress.py`、gap report、无 Secret MCP example 与 WorkBuddy skill；最小修改 trigger issuer、Credential/Hub launcher、WorkBuddy/operations/6.17 文档。既有 smoke JSON 仍位于 Git ignored 的 `var/evidence/phase6-step6.17/`，未纳入提交。
+- WorkBuddy 官方 Skills 支持运行时 `${CODEBUDDY_SESSION_ID}`；当前 skill 将其作为 Hub conversation ID，未展开占位符 fail closed，adapter 再由 session ID + idempotency key 派生稳定 message/turn ID。自定义 MCP schema 仍没有已验证的 native user-message ID/provenance 注入字段；真 WorkBuddy 是否实际展开当前 session、是否按 skill 传入真实 provenance，仍为 `ENVIRONMENT_VALIDATION_REQUIRED`，只能由上述 Human B→C 真机步骤闭合。
+- 固定 PublicBase 在 6.17 准备时的有界探测未连通；原因未在本步诊断或修复。新 WorkBuddy ingress 是本机 stdio，不以 Quick Tunnel 或 PublicBase 代替；PublicBase 继续固定为 `https://grokbuddy.amirhasan.top`，需要公网运行态证据时按既有 Pack E 运维 runbook 另行复核，不能改 hostname。
 - SQLite 前后快照不能自动把并发的无关 Hub 变化归因给某条 WorkBuddy 消息。A/C 若出现任何变化必须保留 diff、查清来源并在安静窗口重跑，不能删除差异后手工判 PASS。
 - B 只验证 Trigger 创建与 conversation 活动唯一性；即使支持表出现后续自动变化，也不能据此声称 6.19 或 6.20 已通过。
 
-## 7. 当前 STOP
+## 8. 当前 STOP
 
-夹具与报告模板已完成；Human A/B/C 真机证据尚未回填。当前结论保持 `WAITING HUMAN / WORKBUDDY`，到此 STOP，不开始 6.19/6.20。
+Case A 已 PASS；Case B 的失败根因已定位并完成仓内接线，Case B 修复后重跑与 Case C 尚未执行。当前结论保持 `WAITING HUMAN RETEST`，到此 STOP，不开始 6.19/6.20，也不自行宣称 6.17 PASS。

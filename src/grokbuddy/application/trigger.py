@@ -97,13 +97,7 @@ def _eligible_spans(segments):
     return found
 
 
-def verify_trigger(evidence, description, actor_id, source_key, now):
-    """Return frozen, raw-text-free metadata and the signed message artifact bytes."""
-    if not isinstance(source_key, bytes) or len(source_key) < 32:
-        raise TriggerSourceUnavailable('Trusted WorkBuddy trigger source is not configured')
-    if not isinstance(evidence, dict) or set(evidence) != EVIDENCE_FIELDS:
-        _invalid()
-    message = evidence['message']
+def _validated_message(message, description, actor_id, now):
     if not isinstance(message, dict) or set(message) != MESSAGE_FIELDS:
         _invalid()
     if not all(_identifier(message.get(name)) for name in
@@ -124,8 +118,46 @@ def verify_trigger(evidence, description, actor_id, source_key, now):
                 or not isinstance(segment['text'], str)):
             _invalid()
     body = ''.join(segment['text'] for segment in segments)
-    if len(body.encode('utf-8')) > 256 * 1024 or body != description:
+    if (len(body.encode('utf-8')) > 256 * 1024
+            or (description is not None and body != description)):
         _invalid()
+    return body, segments
+
+
+def issue_trigger_evidence(message, source_key, now):
+    """Sign one connector-attested WorkBuddy message for the Hub's second check."""
+    if not isinstance(source_key, bytes) or len(source_key) < 32:
+        raise TriggerSourceUnavailable('Trusted WorkBuddy trigger source is not configured')
+    body, segments = _validated_message(
+        message, None, message.get('principal_id') if isinstance(message, dict) else None, now)
+    spans = _eligible_spans(segments)
+    if not spans:
+        raise TriggerNotFound('Current user natural-language body has no exact trigger phrase')
+    message_bytes = canonical(message)
+    start, end = spans[0]
+    evidence = {
+        'message': message,
+        'signature': hmac.new(source_key, message_bytes, hashlib.sha256).hexdigest(),
+        'body_sha256': hashlib.sha256(body.encode('utf-8')).hexdigest(),
+        'phrase': PHRASE,
+        'start_byte': start,
+        'end_byte': end,
+    }
+    # Issuance and intake deliberately use the same structural and provenance
+    # validation. TaskService still verifies this evidence again in its own
+    # create transaction.
+    verify_trigger(evidence, body, message['principal_id'], source_key, now)
+    return body, evidence
+
+
+def verify_trigger(evidence, description, actor_id, source_key, now):
+    """Return frozen, raw-text-free metadata and the signed message artifact bytes."""
+    if not isinstance(source_key, bytes) or len(source_key) < 32:
+        raise TriggerSourceUnavailable('Trusted WorkBuddy trigger source is not configured')
+    if not isinstance(evidence, dict) or set(evidence) != EVIDENCE_FIELDS:
+        _invalid()
+    message = evidence['message']
+    body, segments = _validated_message(message, description, actor_id, now)
     if not isinstance(evidence['signature'], str) or not HEX_SHA256.fullmatch(evidence['signature']):
         _invalid()
     message_bytes = canonical(message)
@@ -148,7 +180,7 @@ def verify_trigger(evidence, description, actor_id, source_key, now):
         'conversation_id': message['conversation_id'],
         'message_id': message['message_id'],
         'turn_id': message['turn_id'],
-        'issued_at': issued_at,
+        'issued_at': message['issued_at'],
         'body_sha256': evidence['body_sha256'],
         'source_sha256': hashlib.sha256(message_bytes).hexdigest(),
         'signature': evidence['signature'],
