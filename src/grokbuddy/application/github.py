@@ -358,14 +358,18 @@ class GitHubProjectionService(Services):
     def _claim(self):
         with self.db.transaction() as repo:
             for row in repo.find("github_comment_projections"):
-                ready = row["status"] in ("READY", "RETRY") and row["next_attempt_at"] <= self.clock.now()
+                if not row.get("binding_id") or not row.get("desired_body"):
+                    continue
+                ready = row["status"] in ("READY", "RETRY", "UNKNOWN") and row["next_attempt_at"] <= self.clock.now()
                 expired = row["status"] == "LEASED" and row["lease_until"] <= self.clock.now()
                 if not (ready or expired):
                     continue
+                claimed_from_status = "UNKNOWN" if expired else row["status"]
                 row.update(status="LEASED", lease_token=uid("LEASE"),
                            lease_generation=row.get("lease_generation", 0) + 1,
                            lease_until=self.clock.now() + self.settings.lease_seconds * 1_000_000,
-                           attempts=row["attempts"] + 1)
+                           attempts=row["attempts"] + 1,
+                           claimed_from_status=claimed_from_status)
                 repo.save("github_comment_projections", row)
                 return row
         return None
@@ -376,16 +380,37 @@ class GitHubProjectionService(Services):
             return None
         with self.db.transaction() as repo:
             binding = repo.get("github_bindings", row["binding_id"])
+        phase = "find"
         try:
             existing = transport.find_comment(binding, row["marker"])
             if existing:
                 if existing.get("body") != row["desired_body"]:
+                    phase = "update"
                     comment = transport.update_comment(binding, str(existing["id"]), row["desired_body"])
                     operation = "UPDATED"
                 else:
                     comment = existing
                     operation = "UNCHANGED"
             else:
+                if row.get("claimed_from_status") == "UNKNOWN":
+                    with self.db.transaction() as repo:
+                        current = repo.get("github_comment_projections", row["id"])
+                        if (current["status"] != "LEASED" or current["lease_token"] != row["lease_token"]
+                                or current.get("lease_generation", 0) != row["lease_generation"]):
+                            return "LEASE_LOST"
+                        exhausted = current["attempts"] >= self.settings.delivery_max_attempts
+                        outcome = "FAILED" if exhausted else "UNKNOWN"
+                        current.update(status=outcome, lease_token=None,
+                                       next_attempt_at=self.clock.now() + 2_000_000,
+                                       reconciliation_checks=current.get("reconciliation_checks", 0) + 1,
+                                       last_safe_error="COMMENT_CREATE_UNCONFIRMED")
+                        repo.save("github_comment_projections", current)
+                        audit(repo, self.clock, self.actor(repo, "system", Role.SYSTEM),
+                              "GITHUB_COMMENT_RECONCILE_" + outcome, current["task_id"],
+                              request_id=current["review_request_id"], review_id=current["review_id"],
+                              attempt=current["attempts"])
+                    return outcome
+                phase = "create"
                 comment = transport.create_comment(binding, row["desired_body"])
                 operation = "CREATED"
             if not isinstance(comment, dict) or not comment.get("id"):
@@ -397,9 +422,14 @@ class GitHubProjectionService(Services):
                 current = repo.get("github_comment_projections", row["id"])
                 if (current["status"] == "LEASED" and current["lease_token"] == row["lease_token"]
                         and current.get("lease_generation", 0) == row["lease_generation"]):
-                    terminal = (not retryable
-                                or current["attempts"] >= self.settings.delivery_max_attempts)
-                    outcome = "FAILED" if terminal else "RETRY"
+                    ambiguous_create = phase == "create" and retryable
+                    reconcile_failure = (row.get("claimed_from_status") == "UNKNOWN"
+                                         and phase == "find" and retryable)
+                    terminal = (not retryable or (
+                        current["attempts"] >= self.settings.delivery_max_attempts
+                        and not ambiguous_create and not reconcile_failure))
+                    outcome = ("FAILED" if terminal else "UNKNOWN"
+                               if ambiguous_create or reconcile_failure else "RETRY")
                     delay = _retry_delay_seconds(error_code, safe_metadata, self.clock.now())
                     current.update(status=outcome, lease_token=None,
                                    next_attempt_at=self.clock.now() + delay * 1_000_000,

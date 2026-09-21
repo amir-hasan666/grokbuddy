@@ -44,9 +44,9 @@ class MockReviewerAdapter:
             raise HubError('Unknown event type')
         return NormalizedEvent(**deepcopy(raw), actor_id=verified_actor_id)
 
-    def run_one(self):
+    def run_one(self, request_id=None):
         """Independent worker turn; a request call never invokes this method."""
-        job = self.queue.take()
+        job = self.queue.take(request_id)
         if job is None:
             return None
         request, spec = job['envelope']['request'], job['envelope']['spec']

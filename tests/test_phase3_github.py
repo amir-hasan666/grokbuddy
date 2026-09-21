@@ -454,7 +454,7 @@ def test_timeout_after_remote_create_recovers_by_marker_without_duplicate(flow):
             raise AssertionError("unchanged marker comment must not be updated")
 
     transport = AmbiguousCreate()
-    assert flow.r.github_projections.project_one(transport) == "RETRY"
+    assert flow.r.github_projections.project_one(transport) == "UNKNOWN"
     flow.r.clock.advance(2)
     assert flow.r.github_projections.project_one(transport) == "UNCHANGED"
     row = flow.rows("github_comment_projections", id=projection["id"])[0]

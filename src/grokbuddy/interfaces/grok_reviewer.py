@@ -22,10 +22,19 @@ async def _respond(send, status, body, headers=()):
 
 class GrokReviewerApplication:
     def __init__(self, runtime, adapter, token):
-        if not isinstance(token, str) or not token or '\r' in token or '\n' in token:
-            raise HubError('Dedicated Grok Reviewer token is required')
         self.runtime, self.adapter = runtime, adapter
-        self.expected = ('Bearer ' + token).encode('utf-8')
+        self.replace_tokens(token)
+
+    def replace_tokens(self, tokens):
+        """Atomically replace the active token set; at most two support overlap rotation."""
+        if isinstance(tokens, str):
+            tokens = [tokens]
+        if (not isinstance(tokens, (list, tuple)) or not 1 <= len(tokens) <= 2
+                or any(not isinstance(token, str) or not token
+                       or '\r' in token or '\n' in token for token in tokens)
+                or len(set(tokens)) != len(tokens)):
+            raise HubError('One or two distinct dedicated Grok Reviewer tokens are required')
+        self.expected_tokens = tuple(('Bearer ' + token).encode('utf-8') for token in tokens)
 
     async def __call__(self, scope, receive, send):
         if scope['type'] != 'http':
@@ -33,7 +42,10 @@ class GrokReviewerApplication:
             return
         headers = scope.get('headers', [])
         auth = [v for k, v in headers if k.lower() == b'authorization']
-        if len(auth) != 1 or not secrets.compare_digest(auth[0], self.expected):
+        authorized = len(auth) == 1
+        matches = [secrets.compare_digest(auth[0], expected)
+                   for expected in self.expected_tokens] if authorized else []
+        if not authorized or not any(matches):
             await _respond(send, 401, {'error': 'unauthorized'}, ((b'www-authenticate', b'Bearer'),))
             return
         path, method = scope.get('path', ''), scope.get('method')

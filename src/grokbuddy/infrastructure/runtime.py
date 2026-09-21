@@ -16,7 +16,8 @@ from grokbuddy.application.governance import GovernanceService
 from grokbuddy.application.events import EventService
 from grokbuddy.application.github import (GitHubBindingService, GitHubEventService,
                                            GitHubProjectionService)
-from grokbuddy.application.workers import Dispatcher, TimeoutService
+from grokbuddy.application.workers import (BindingRouteWorker, Dispatcher, ProjectionWorker,
+                                            ReviewerIntakeWorker, Supervisor, TimeoutService)
 from grokbuddy.application.grok_routing import GrokRoutingService
 from grokbuddy.application.common import digest, iso
 from .clock import SystemClock
@@ -103,6 +104,22 @@ class LocalRuntime:
         """One bounded local worker iteration, explicitly invoked after request submission."""
         return {'timeouts': self.timeouts.sweep(), 'dispatch': self.dispatcher.dispatch_one(),
                 'mock': self.mock.run_one(), 'event': self.events.handle_one()}
+
+    def supervisor(self, *, projection_transport=None, binding_policy=None,
+                   intake_source='local-mock-supervisor'):
+        """Build the Phase 6.6 scheduler without starting a service or external I/O."""
+        args = (self.db, self.store, self.contracts, self.clock, self.settings)
+        intake = ReviewerIntakeWorker(
+            *args, reviewer_actor_id='mock-reviewer',
+            consumer=lambda rr: self.mock.run_one(rr['id']),
+            reconciler=lambda rr: self.queue.completed(rr['id']),
+            source=intake_source)
+        binding_routes = BindingRouteWorker(self, binding_policy) if binding_policy else None
+        projections = (ProjectionWorker(self.github_projections, projection_transport)
+                       if projection_transport is not None else None)
+        return Supervisor(binding_routes=binding_routes, recovery=self.timeouts,
+                          dispatcher=self.dispatcher, intake=intake, events=self.events,
+                          projections=projections)
 
     def grok_dispatcher(self, transport, reviewer_actor_id, public_base_url):
         """Build a separately routed worker; the local Mock worker stays unchanged."""

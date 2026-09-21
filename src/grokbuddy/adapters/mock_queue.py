@@ -19,15 +19,22 @@ class SQLiteMockQueue(Services):
         with self.db.transaction() as repo:
             return bool(repo.find('mock_jobs', id=key))
 
-    def take(self):
+    def take(self, key=None):
         with self.db.transaction() as repo:
             for job in repo.find('mock_jobs'):
+                if key is not None and job['id'] != key:
+                    continue
                 if job['status'] == 'READY' or (job['status'] == 'LEASED' and job['lease_until'] <= self.clock.now()):
                     job.update(status='LEASED', lease_token=uid('LEASE'),
                                lease_until=self.clock.now() + self.settings.lease_seconds * 1_000_000)
                     repo.save('mock_jobs', job)
                     return job
-        return None
+            return None
+
+    def completed(self, key):
+        with self.db.transaction() as repo:
+            jobs = repo.find('mock_jobs', id=key)
+            return bool(jobs and jobs[0]['status'] == 'DONE')
 
     def complete(self, job, events):
         with self.db.transaction() as repo:
