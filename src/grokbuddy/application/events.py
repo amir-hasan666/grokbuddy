@@ -22,16 +22,32 @@ def persist_event(repo, services, event):
         if prior[0].get('normalized_hash') != normalized_hash:
             raise Conflict('Deduplication key reused with different content')
         return prior[0]['id']
-    # Record raw structured content separately; Audit never contains it.
-    payload_artifact = services.add_artifact(repo, task['id'], actor, 'REVIEW_RESULT', canonical(event.payload))
-    row = dict(id=uid('IN'), **envelope, payload_artifact_id=payload_artifact['id'],
-               payload_sha256=payload_artifact['sha256'], received_at=services.clock.now(),
+    # The same normalized result may arrive through callback and poll.  Keep a
+    # receipt per ingress key, but reuse the immutable payload Artifact metadata.
+    semantic_prior = [row for row in repo.find(
+        'inbox_events', review_request_id=event.review_request_id)
+        if row.get('review_id') == event.review_id
+        and row.get('normalized_hash') == normalized_hash]
+    if semantic_prior:
+        payload_artifact_id = semantic_prior[0]['payload_artifact_id']
+        payload_sha256 = semantic_prior[0]['payload_sha256']
+        duplicate_of = semantic_prior[0]['id']
+    else:
+        # Record raw structured content separately; Audit never contains it.
+        payload_artifact = services.add_artifact(
+            repo, task['id'], actor, 'REVIEW_RESULT', canonical(event.payload))
+        payload_artifact_id = payload_artifact['id']
+        payload_sha256 = payload_artifact['sha256']
+        duplicate_of = None
+    row = dict(id=uid('IN'), **envelope, payload_artifact_id=payload_artifact_id,
+               payload_sha256=payload_sha256, received_at=services.clock.now(),
                receipt_key=receipt_key, normalized_hash=normalized_hash,
-               status='READY', lease_generation=0, lease_token=None, lease_until=0, attempts=0)
+               status='READY', lease_generation=0, lease_token=None, lease_until=0, attempts=0,
+               duplicate_of_ingress_id=duplicate_of)
     repo.add('inbox_events', row)
     audit(repo, services.clock, actor, 'EVENT_RECEIVED', task['id'], request_id=event.review_request_id,
           event_id=event.event_id, ingress_id=row['id'], source=event.source,
-          execution_identity=event.execution_identity)
+          execution_identity=event.execution_identity, duplicate_of_ingress_id=duplicate_of)
     return row['id']
 
 
@@ -106,10 +122,10 @@ class EventService(Services):
                 elif payload != {'protocol_version': expected['protocol_version']}:
                     raise HubError('Invalid lifecycle event payload')
                 if self.clock.now() >= task['deadline_at']:
-                    self.escalate(repo, task, 'TASK_TIMEOUT')
+                    self.review_failure_gate(repo, task, 'TASK_TIMEOUT', 'TIMED_OUT')
                     return self._finish(repo, incoming, actor, 'LATE_EVENT', event_hash, semantic_key)
                 if self.clock.now() >= rr['deadline_at']:
-                    self.escalate(repo, task, 'REVIEW_TIMEOUT', 'TIMED_OUT')
+                    self.review_failure_gate(repo, task, 'REVIEW_TIMEOUT', 'TIMED_OUT')
                     return self._finish(repo, incoming, actor, 'LATE_EVENT', event_hash, semantic_key)
                 if task['active_rr_id'] != rr['id'] or task['content_revision'] != expected['content_revision']:
                     raise HubError('Review is not current')
@@ -122,7 +138,7 @@ class EventService(Services):
                         repo.save('review_rounds', round_row)
                         self.change(repo, task, 'plan_started' if rr['review_type'] == 'PLAN_REVIEW' else 'final_started', actor, rr['id'])
                 elif incoming['event_type'] == 'ReviewFailed':
-                    self.escalate(repo, task, 'REVIEWER_FAILED', 'FAILED')
+                    self.review_failure_gate(repo, task, 'REVIEWER_FAILED', 'FAILED')
                 else:
                     self._complete(repo, task, rr, incoming, payload, actor)
                 return self._finish(repo, incoming, actor, 'APPLIED', event_hash, semantic_key)

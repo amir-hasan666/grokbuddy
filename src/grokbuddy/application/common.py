@@ -143,6 +143,34 @@ class Services:
         if task['state'] not in TERMINAL and task['state'] != TaskState.ESCALATED:
             self.change(repo, task, 'escalate', self.actor(repo, 'system', Role.SYSTEM))
 
+    def review_failure_gate(self, repo, task, reason, rr_status='FAILED'):
+        """Preserve a v2 failure and freeze automation at its stage-specific Human Gate.
+
+        Historical v1 tasks retain the legacy ESCALATED behavior.  This helper is
+        deliberately transaction-local so timeout, dispatch and event workers all
+        make the same atomic RR/Task decision.
+        """
+        rr = None
+        if task.get('active_rr_id'):
+            rr = repo.get('review_requests', task['active_rr_id'])
+        protocol = (rr or {}).get('protocol_version') or task.get('review_protocol_version', 'v1')
+        if protocol != 'v2':
+            self.escalate(repo, task, reason, rr_status)
+            return 'ESCALATED'
+        review_type = (rr or {}).get('review_type')
+        if review_type is None:
+            plan_states = {
+                'NEW', 'PLANNING', 'PLAN_REVIEW_PENDING', 'PLAN_REVIEWING',
+                'PLAN_CHANGES_REQUIRED',
+            }
+            review_type = 'PLAN_REVIEW' if task['state'] in plan_states else 'FINAL_REVIEW'
+        self.stop_request(repo, task, rr_status, reason)
+        task.update(escalation_reason=reason, gate_reason=reason, automation_frozen=True)
+        action = 'plan_human_review' if review_type == 'PLAN_REVIEW' else 'final_human_review'
+        if task['state'] not in ('PLAN_HUMAN_REVIEW', 'FINAL_HUMAN_REVIEW'):
+            self.change(repo, task, action, self.actor(repo, 'system', Role.SYSTEM))
+        return task['state']
+
     def ensure_actions_closed(self, repo, task):
         unresolved = [a for a in repo.find('human_approvals', task_id=task['id'], kind='HIGH_RISK_ACTION')
                       if a['status'] != 'CONSUMED' and not (a['status'] == 'REJECTED' and a.get('withdrawn'))]

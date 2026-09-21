@@ -125,7 +125,8 @@ class WorkerTaskService(Services):
                     raise Conflict('Worker assignment is not available to claim')
                 claimed = {**assignment, 'status': 'CLAIMED', 'version': assignment['version'] + 1,
                            'worker_principal_id': actor_id, 'lease_token': uid('LEASE'),
-                           'lease_until': task['deadline_at'],
+                           'lease_until': min(task['deadline_at'],
+                                              self.clock.now() + self.settings.lease_seconds * 1_000_000),
                            'lease_generation': assignment['lease_generation'] + 1,
                            'attempts': assignment['attempts'] + 1,
                            'claimed_at': self.clock.now()}
@@ -165,10 +166,13 @@ class WorkerTaskService(Services):
             assignment = self._assignment(repo, task_id, ('CLAIMED',))
             if assignment:
                 if (assignment.get('worker_principal_id') != actor_id
-                        or task['state'] != 'EXECUTING' or task.get('automation_frozen')):
+                        or task['state'] != 'EXECUTING' or task.get('automation_frozen')
+                        or assignment['lease_until'] <= self.clock.now()):
                     raise PermissionDenied('Worker assignment is not active for this principal')
                 updated = {**assignment, 'version': assignment['version'] + 1,
-                           'progress_summary': summary.strip(), 'progress_at': self.clock.now()}
+                           'progress_summary': summary.strip(), 'progress_at': self.clock.now(),
+                           'lease_until': min(task['deadline_at'],
+                                              self.clock.now() + self.settings.lease_seconds * 1_000_000)}
                 repo.compare_and_swap('worker_assignments', updated,
                                       {'version': assignment['version'], 'status': 'CLAIMED',
                                        'lease_generation': assignment['lease_generation']})
@@ -200,7 +204,8 @@ class WorkerTaskService(Services):
             if assignment:
                 if (assignment['version'] != expected_version
                         or assignment.get('worker_principal_id') != actor_id
-                        or task['state'] != 'EXECUTING' or task.get('automation_frozen')):
+                        or task['state'] != 'EXECUTING' or task.get('automation_frozen')
+                        or assignment['lease_until'] <= self.clock.now()):
                     raise Conflict('Task is not a claimed Worker assignment awaiting completion')
                 artifact, _ = self.artifact(repo, task_id, artifact_id, kinds={'EVIDENCE', 'DIFF', 'REPORT'})
                 if (artifact['created_by'] != actor_id
