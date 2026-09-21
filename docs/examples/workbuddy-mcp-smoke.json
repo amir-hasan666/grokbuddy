@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "grokbuddy-hub": {
+      "type": "stdio",
+      "command": "D:\\Codex\\grokbuddy\\.venv-phase0\\Scripts\\python.exe",
+      "args": [
+        "D:\\Codex\\grokbuddy\\scripts\\grokbuddy_mcp.py",
+        "--runtime-dir",
+        "D:\\Codex\\grokbuddy\\var\\workbuddy-mcp",
+        "--contracts-dir",
+        "D:\\Codex\\grokbuddy\\docs\\contracts",
+        "--actor",
+        "builder",
+        "--human-actor",
+        "human"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}

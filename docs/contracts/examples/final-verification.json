@@ -1,0 +1,33 @@
+{
+  "protocol_version": "v1",
+  "task_id": "TASK-00000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-00000000-0000-4000-8000-000000000003",
+  "review_id": "REV-00000000-0000-4000-8000-000000000003",
+  "review_type": "FINAL_REVIEW",
+  "review_round": 2,
+  "content_revision": 2,
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "verdict": "PASS",
+  "summary": "设计示例：复审验证通过",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-16T12:00:00Z",
+  "findings": [],
+  "verifications": [
+    {
+      "finding_id": "FND-00000000-0000-4000-8000-000000000001",
+      "outcome": "VERIFIED",
+      "evidence": {
+        "artifact_id": "ART-00000000-0000-4000-8000-000000000004",
+        "locator": "case-26",
+        "description": "设计示例证据，不是实际运行结果"
+      },
+      "reason": "仅为契约示例"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "observed_at": "2026-09-17T19:00:00+08:00",
+  "scope": "WorkBuddy 5.5.6 local MCP transport and configuration probe",
+  "client": {
+    "executable": "D:\\WorkBuddy\\WorkBuddy.exe",
+    "file_version": "5.5.6",
+    "product_version": "5.5.6.0",
+    "last_launch_version": "5.5.6",
+    "bundled_cli": "D:\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\bin\\codebuddy",
+    "bundled_mcp_sdk": "@modelcontextprotocol/sdk 1.29.0"
+  },
+  "configuration": {
+    "path": "C:\\Users\\22241\\.workbuddy\\mcp.json",
+    "observed_shape": {
+      "mcpServers": {}
+    },
+    "persistent_write_performed": false
+  },
+  "cli_help_evidence": {
+    "global_option": "--mcp-config <fileOrString>",
+    "mcp_add_transports": [
+      "stdio",
+      "sse",
+      "http"
+    ],
+    "default_transport": "stdio",
+    "stdio_fields": [
+      "type",
+      "command",
+      "args",
+      "env"
+    ]
+  },
+  "official_documentation": {
+    "url": "https://cloud.tencent.com/document/product/1831/137039",
+    "finding": "WorkBuddy Enterprise documents stdio, SSE, and HTTP configurations and the mcpServers JSON shape."
+  },
+  "decision": {
+    "transport": "stdio",
+    "reason": "Local single-host Hub; WorkBuddy CLI default; no listener, port, or HTTP authentication required."
+  },
+  "local_validation": {
+    "mcp_python_sdk": "2.2.0",
+    "legacy_protocol": "2025-11-25",
+    "tools_listed": 11,
+    "stdio_subprocess_create_task": "PASS",
+    "pending_query_separation": "PASS",
+    "reconnect_idempotency": "PASS",
+    "full_test_suite": "448 passed, 0 failed, 0 skipped"
+  },
+  "workbuddy_validation": {
+    "ephemeral_config_server_start": "PARTIAL: Hub runtime was initialized, but no task/audit row was created",
+    "persistent_mcp_json_registration": "NOT_RUN: safety approval rejected the user-level configuration write under the existing repository gate",
+    "real_create_task_call": "NOT_RUN: WorkBuddy model endpoint was blocked in the sandbox and escalation was rejected under the same gate",
+    "status": "ENVIRONMENT_VALIDATION_REQUIRED"
+  }
+}

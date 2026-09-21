@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grokbuddy-local-core"
+version = "0.1.0"
+description = "Offline Collaboration Hub core with asynchronous mock reviews"
+requires-python = ">=3.12"
+dependencies = [
+    "jsonschema==4.26.0",
+    "mcp==2.2.0",
+    "rfc3339-validator==0.1.4",
+]
+
+[project.scripts]
+grokbuddy-cli = "grokbuddy.interfaces.cli:main"
+grokbuddy-http = "grokbuddy.interfaces.http:main"
+grokbuddy-mcp = "grokbuddy.interfaces.mcp:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"grokbuddy.adapters" = ["schema.sql"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
