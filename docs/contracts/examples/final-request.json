@@ -1,0 +1,17 @@
+{
+  "protocol_version": "v1",
+  "task_id": "TASK-00000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-00000000-0000-4000-8000-000000000002",
+  "review_id": "REV-00000000-0000-4000-8000-000000000002",
+  "review_type": "FINAL_REVIEW",
+  "review_round": 1,
+  "content_revision": 1,
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "profile_artifact_id": "ART-00000000-0000-4000-8000-000000000002",
+  "input_artifact_id": "ART-00000000-0000-4000-8000-000000000003",
+  "expected_reviewer_actor_id": "mock-reviewer",
+  "deadline_at": "2026-09-16T12:30:00Z"
+}

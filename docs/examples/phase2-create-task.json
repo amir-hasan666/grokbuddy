@@ -1,0 +1,4 @@
+{
+  "description": "Phase 2 CLI local smoke task",
+  "idempotency_key": "phase2-readme-create-task-v1"
+}

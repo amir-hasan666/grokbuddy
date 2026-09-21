@@ -1,0 +1,33 @@
+{
+  "config_path": "C:\\Users\\22241\\.workbuddy\\mcp.json",
+  "server": "grokbuddy-worker",
+  "transport": "stdio",
+  "cwd": "D:\\Codex\\grokbuddy",
+  "env_names": [
+    "PYTHONUTF8"
+  ],
+  "protocol_version": "2025-11-25",
+  "tools": [
+    "list_available_tasks",
+    "get_task",
+    "claim_task",
+    "submit_artifact",
+    "report_progress"
+  ],
+  "probe_task_id": "TASK-1c7dc9a4-0d88-46d6-b9a4-c7f7068447a7",
+  "probe_in_available_tasks": 1,
+  "probe_worker_status": "OFFERED",
+  "probe_state": "NEW",
+  "probe_claimed_by": null,
+  "instruction_marker_present": true,
+  "called": [
+    "tools/list",
+    "list_available_tasks",
+    "get_task"
+  ],
+  "not_called": [
+    "claim_task",
+    "submit_artifact",
+    "report_progress"
+  ]
+}

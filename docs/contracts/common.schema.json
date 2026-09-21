@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:collab:common:v1",
+  "$defs": {
+    "TASK": {
+      "type": "string",
+      "pattern": "^TASK-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "RR": {
+      "type": "string",
+      "pattern": "^RR-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "REV": {
+      "type": "string",
+      "pattern": "^REV-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "FND": {
+      "type": "string",
+      "pattern": "^FND-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "ART": {
+      "type": "string",
+      "pattern": "^ART-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profile": {
+      "enum": [
+        "generic",
+        "oracle_production",
+        "sql_server_production",
+        "python_backend",
+        "iis_windows",
+        "document"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "evidence": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "$ref": "urn:collab:common:v1#/$defs/ART"
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "artifact_id",
+        "locator",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "artifact_ref": {
+      "type": "object",
+      "properties": {
+        "artifact_id": {
+          "$ref": "urn:collab:common:v1#/$defs/ART"
+        },
+        "sha256": {
+          "$ref": "urn:collab:common:v1#/$defs/hash"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

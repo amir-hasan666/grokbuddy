@@ -1,0 +1,105 @@
+{
+  "scope": "LOCAL_MOCK_ONLY",
+  "external_integration_gate": "BLOCKED",
+  "task_id": "TASK-b8bd32bd-bdfe-4d8e-a020-dd4375c402b8",
+  "database": "D:\\Codex\\grokbuddy\\var\\demo-f3f4dd5f-2a08-4386-b203-bbe4d574b2c6\\hub.db",
+  "task_state": "DONE",
+  "finding_id": "FND-f77f4b60-71fb-4bb8-849e-9c1c65f8ad22",
+  "finding_status": "VERIFIED",
+  "restart_verified": true,
+  "trace": [
+    {
+      "step": "request",
+      "receipt": {
+        "review_request_id": "RR-0f4a9f36-423e-474f-a422-53d7e4db8f91",
+        "status": "PENDING"
+      },
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "dispatch",
+      "result": "SENT",
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "mock",
+      "result": "NEEDS_CHANGES",
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "event_handler",
+      "result": "APPLIED",
+      "task_state": "PLAN_CHANGES_REQUIRED"
+    },
+    {
+      "step": "request",
+      "receipt": {
+        "review_request_id": "RR-ac48e249-76d5-417c-9af9-9a5c13450602",
+        "status": "PENDING"
+      },
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "dispatch",
+      "result": "SENT",
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "mock",
+      "result": "PASS",
+      "task_state": "PLAN_REVIEW_PENDING"
+    },
+    {
+      "step": "event_handler",
+      "result": "APPLIED",
+      "task_state": "PLAN_APPROVED"
+    },
+    {
+      "step": "request",
+      "receipt": {
+        "review_request_id": "RR-e32143f9-015f-4770-912d-7c04b2ba2ed7",
+        "status": "PENDING"
+      },
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "dispatch",
+      "result": "SENT",
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "mock",
+      "result": "NEEDS_CHANGES",
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "event_handler",
+      "result": "APPLIED",
+      "task_state": "FINAL_CHANGES_REQUIRED"
+    },
+    {
+      "step": "request",
+      "receipt": {
+        "review_request_id": "RR-dc1030ae-7585-49de-953c-38a3c73e9487",
+        "status": "PENDING"
+      },
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "dispatch",
+      "result": "SENT",
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "mock",
+      "result": "PASS",
+      "task_state": "FINAL_REVIEW_PENDING"
+    },
+    {
+      "step": "event_handler",
+      "result": "APPLIED",
+      "task_state": "DONE"
+    }
+  ],
+  "audit_count": 75
+}

@@ -1,0 +1,41 @@
+{
+  "protocol_version": "v1",
+  "task_id": "TASK-00000000-0000-4000-8000-000000000001",
+  "content_revision": 1,
+  "original_task": {
+    "artifact_id": "ART-00000000-0000-4000-8000-000000000001",
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "approved_plan": {
+    "artifact_id": "ART-00000000-0000-4000-8000-000000000003",
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "change_scope": "Phase 0 文档契约示例",
+  "changed_files": [
+    "ARCHITECTURE.md"
+  ],
+  "diff_artifact": {
+    "artifact_id": "ART-00000000-0000-4000-8000-000000000005",
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "test_results": [
+    {
+      "artifact_id": "ART-00000000-0000-4000-8000-000000000006",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "self_test": {
+    "status": "PASS",
+    "summary": "示例占位结论，不是本项目运行测试证据"
+  },
+  "known_risks": [
+    "真实 Reviewer 能力待验证"
+  ],
+  "unverified_items": [
+    "当前账号 trigger"
+  ],
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "profile_artifact_id": "ART-00000000-0000-4000-8000-000000000002"
+}

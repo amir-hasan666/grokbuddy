@@ -1,0 +1,890 @@
+{
+  "scope": "PHASE1_CONTRACT_REGRESSION",
+  "total": 171,
+  "passed": 171,
+  "failed": 0,
+  "external_environment_gate": "BLOCKED",
+  "not_run_by_this_checker": [
+    "Hub runtime",
+    "SQLite domain transactions",
+    "MockReviewer workflow",
+    "WorkBuddy MCP handshake",
+    "Grok Bot trigger",
+    "GitHub API/Webhook/Pull",
+    "production permissions",
+    "business demos"
+  ],
+  "checks": [
+    {
+      "check": "required:README.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:AGENTS.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:ARCHITECTURE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:DATA_MODEL.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:STATE_MACHINE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:SECURITY.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:REVIEW_PROTOCOL.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:IMPLEMENTATION_PLAN.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/SOURCE_OF_TRUTH.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/ASYNC_REVIEW_SEQUENCE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/ARTIFACT_MODEL.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/FINDING_LIFECYCLE.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/GITHUB_ACTORS.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/GITHUB_CONNECTIVITY.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/VERDICT_RULES.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/PROTOCOL_V1.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/WORKBUDDY_INTEGRATION.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "required:docs/GROK_BOT_INTEGRATION.md",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "relative-markdown-links",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "phase1-local-core-source",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "example-secrets-empty",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "skill:architecture-gate",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "skill:phase-execution",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "skill:review-protocol-validator",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "skill:async-workflow-test",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "date-time-format-checker-active",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "meta-schema:common",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "meta-schema:final-package",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "meta-schema:review-request",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "meta-schema:review-result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:final-package",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:original_task",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:approved_plan",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:change_scope",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:changed_files",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:test_results",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:self_test",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:known_risks",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:unverified_items",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-package:profile_artifact_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:final-package",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:final-request",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_request_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_type",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_round",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:input_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:profile_artifact_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:input_artifact_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:expected_reviewer_actor_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-request:deadline_at",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:final-request",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:final-result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_request_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_type",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_round",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:input_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:verdict",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:summary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:reviewer",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:timestamp",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:findings",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-result:verifications",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:final-result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:final-verification",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_request_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_type",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_round",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:input_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:verdict",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:summary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:reviewer",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:timestamp",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:findings",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:final-verification:verifications",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:final-verification",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:plan-request",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_request_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_type",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_round",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:input_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:profile_artifact_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:input_artifact_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:expected_reviewer_actor_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-request:deadline_at",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:plan-request",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "positive:plan-result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:protocol_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:task_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_request_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_type",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_round",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:content_revision",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_profile",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:review_profile_version",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:profile_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:input_sha256",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:verdict",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:summary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:reviewer",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:timestamp",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:comments",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:risks",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "missing:plan-result:suggestions",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "unknown-field:plan-result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:protocol_version:v2",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:review_round:0",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:review_round:True",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:content_revision:-1",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:review_type:FINAL",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:input_sha256:broken",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:review_profile:invented",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:plan-request:task_id:TASK-R001",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:protocol_version:v2",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:review_round:0",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:review_round:True",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:content_revision:-1",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:review_type:FINAL",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:input_sha256:broken",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:review_profile:invented",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:final-result:task_id:TASK-R001",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:invalid-verdict",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:invalid-date",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:empty-summary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:oversize-summary",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:severity",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:blocking-string",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:no-evidence",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:reviewer-sets-status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:reviewer-sets-new-primary-key",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:mixed-plan-final",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:mixed-final-plan",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:verification-verdict",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:missing-diff-and-commit",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:missing-test-artifacts",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:nested-evidence-id",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "negative:nested-reviewer-unknown-field",
+      "passed": true,
+      "detail": ""
+    }
+  ],
+  "input_sha256": {
+    "docs/contracts/common.schema.json": "c6fcbf3dcfdf0b4fa859be36877a660c979996bacad5b56168ce4e2b72e7ed38",
+    "docs/contracts/examples/final-package.json": "e145ecdc6687152efb8957303a7f7e5b5978b2576f502c643bb7641576a5fd7f",
+    "docs/contracts/examples/final-request.json": "f24c3f1bde8ae3119c14a29ceef8a15c884fe57cad4bc84564617e41b5c069e8",
+    "docs/contracts/examples/final-result.json": "c866fed2ce3625c42f954e3da3b137bb67ece670f5fd679cd141d52d230d1193",
+    "docs/contracts/examples/final-verification.json": "845e6d41ecafa5d6a884772cee5221c09ce163b1783ef1d72cd9a13454642f8b",
+    "docs/contracts/examples/plan-request.json": "4344e3602bd8845e4655389341a43c413652fd840a4a679086abe5f3bff075ab",
+    "docs/contracts/examples/plan-result.json": "2adf6b64065d96009bc2cbe0eea88002b360038b5a2c3cd2ba0fe1e4fa846331",
+    "docs/contracts/final-package.schema.json": "65c91bde629b5c595202b34d613bc9759ceabca17761ebabcabbe10474a3f88f",
+    "docs/contracts/review-request.schema.json": "a9694a70148b2dc6b48ed92237761c7b53bc4e52a4faae3624a4f52f71b175ac",
+    "docs/contracts/review-result.schema.json": "a5272b8784bedfe8347f20a221b320b1ac4cc54661d0c677b07032ff7add07bf",
+    "skills/architecture-gate/SKILL.md": "54e27a6876bd8e84ae57cd756f2ae9a81ee61b609592daf1ba904b35e16b20f9",
+    "skills/async-workflow-test/SKILL.md": "95aa9164a9066dca462e2317cfe3d43a9f42e897cd1f3b9b66ab47d3a668f477",
+    "skills/phase-execution/SKILL.md": "0bcca71bc99512649ff93bd959df113f210ee2809d5f2df9aaf8dd364f3635d2",
+    "skills/review-protocol-validator/SKILL.md": "268b6f9455d6a12d87d9367872a9d8b0570b147548787f6fb9721f3e971cff10"
+  }
+}

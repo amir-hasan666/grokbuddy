@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:collab:final-package:v1",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "v1"
+    },
+    "task_id": {
+      "$ref": "urn:collab:common:v1#/$defs/TASK"
+    },
+    "content_revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "original_task": {
+      "$ref": "urn:collab:common:v1#/$defs/artifact_ref"
+    },
+    "approved_plan": {
+      "$ref": "urn:collab:common:v1#/$defs/artifact_ref"
+    },
+    "change_scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      }
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "diff_artifact": {
+      "$ref": "urn:collab:common:v1#/$defs/artifact_ref"
+    },
+    "test_results": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:collab:common:v1#/$defs/artifact_ref"
+      },
+      "minItems": 1
+    },
+    "self_test": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "NOT_RUN"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "status",
+        "summary"
+      ],
+      "additionalProperties": false
+    },
+    "known_risks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000
+      }
+    },
+    "unverified_items": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000
+      }
+    },
+    "review_profile": {
+      "$ref": "urn:collab:common:v1#/$defs/profile"
+    },
+    "review_profile_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$"
+    },
+    "profile_sha256": {
+      "$ref": "urn:collab:common:v1#/$defs/hash"
+    },
+    "profile_artifact_id": {
+      "$ref": "urn:collab:common:v1#/$defs/ART"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "task_id",
+    "content_revision",
+    "original_task",
+    "approved_plan",
+    "change_scope",
+    "changed_files",
+    "test_results",
+    "self_test",
+    "known_risks",
+    "unverified_items",
+    "review_profile",
+    "review_profile_version",
+    "profile_sha256",
+    "profile_artifact_id"
+  ],
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "commit_sha"
+      ]
+    },
+    {
+      "required": [
+        "diff_artifact"
+      ]
+    }
+  ]
+}

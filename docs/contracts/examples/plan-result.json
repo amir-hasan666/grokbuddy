@@ -1,0 +1,33 @@
+{
+  "protocol_version": "v1",
+  "task_id": "TASK-00000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-00000000-0000-4000-8000-000000000001",
+  "review_id": "REV-00000000-0000-4000-8000-000000000001",
+  "review_type": "PLAN_REVIEW",
+  "review_round": 1,
+  "content_revision": 1,
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "verdict": "NEEDS_CHANGES",
+  "summary": "需要补充失败恢复证据",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-16T12:00:00Z",
+  "comments": [
+    "说明提交后投递失败的恢复方法"
+  ],
+  "risks": [
+    {
+      "code": "EVIDENCE_INSUFFICIENT",
+      "description": "缺少崩溃恢复证据",
+      "blocking": true
+    }
+  ],
+  "suggestions": [
+    "增加 outbox 失败恢复验证"
+  ]
+}
