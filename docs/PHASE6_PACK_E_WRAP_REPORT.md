@@ -1,10 +1,12 @@
+`PHASE6-STEP6.8-NAMED-TUNNEL-PUBLICBASE: PASS`
+`PHASE6-STEP6.9-AUTOSTART-OBSERVABILITY: PASS`
+`PHASE6-PACK-E: PASS`
+
 # Phase 6 Pack E — 6.9 Autostart / Cleanup / Observability Wrap
 
 日期：2026-09-21（Asia/Shanghai）
 
-- `PHASE6-STEP6.8-NAMED-TUNNEL-PUBLICBASE: PASS`（沿用 Human 已验证并冻结的 6.8 证据）
-- `PHASE6-STEP6.9-AUTOSTART-OBSERVABILITY: IMPLEMENTATION READY / WAITING HUMAN REBOOT VALIDATION`
-- `PHASE6-PACK-E: NOT PASS`
+`REBOOT ACCEPTANCE: PASS`（2026-09-21 约 21:17，Asia/Shanghai）
 
 事故恢复说明：上一轮 Codex Shell 等待状态卡死后，本轮从现有脏工作区继续；未 reset/checkout/clean，已落盘代码、Windows Service 与 `var/service/hub-secrets.clixml` 均保留。
 
@@ -85,9 +87,20 @@ Phase 4/5 报告中的 `trycloudflare.com` 是不可改写的当次审计证据�
 
 ## 6. 重启验收
 
-`REBOOT ACCEPTANCE: NOT RUN`。本轮未获授权重启机器，不能把 Automatic/AtLogOn 配置、任务手工启动、当前本地/公网通过或已冻结 6.8 证据冒充重启证据。
+`REBOOT ACCEPTANCE: PASS`。
 
-重启后验收命令、预期码、卸载与恢复步骤见 [Phase 6 Operations Runbook](PHASE6_OPERATIONS_RUNBOOK.md)。Credential Manager 实现与当前任务启动验证已就绪；在实际重启并登录、AtLogOn 自动拉起、8788 自动监听及统一探测通过之前，6.9 与 Pack E 都不得判 PASS。
+2026-09-21 约 21:17（Asia/Shanghai），Human 已重启 Windows、登录配置任务的用户，且未手工启动 Hub。以下表格只记录 Human 提供的当次命令输出摘要，不补写未提供的字段，也不读取或记录 Secret 值/hash：
+
+| 时间 | 命令 / 探针 | 当次关键字段 | 判定 |
+| --- | --- | --- | --- |
+| 2026-09-21 约 21:17（Asia/Shanghai） | `Test-GrokBuddyCredentialStore.ps1` | `GrokBuddy/GITHUB_WEBHOOK_SECRET: PRESENT`；`GrokBuddy/GROKBUDDY_MCP_TOKEN: PRESENT`；`GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN: PRESENT` | PASS；Secret Source 仍为当前任务用户的 Windows Credential Manager |
+| 同次重启验收 | `Test-GrokBuddyRuntime.ps1` | cloudflared `Running / Automatic` | PASS |
+| 同次重启验收 | `Test-GrokBuddyRuntime.ps1` | Hub task `Running`；`LastTaskResult=267009`（`SCHED_S_TASK_RUNNING`）；`HoldsHubProcess=true` | PASS；长期 launcher 正持有 Hub 子进程，`267009` 是预期状态，不要求为 `0` |
+| 同次重启验收 | `Test-GrokBuddyRuntime.ps1` | 8788 `LISTENING`；Human 摘要中的示例 PID 为 5440，实际 PID 属易变字段，以保存的当次输出为准 | PASS |
+| 同次重启验收 | `Test-GrokBuddyRuntime.ps1` | 本地 `/health`、`/ready`、`/` 为 `200 / 200 / 404`，body 符合约定 | PASS |
+| 同次重启验收 | `Test-GrokBuddyRuntime.ps1` | 公网 `https://grokbuddy.amirhasan.top` 的 `/health`、`/ready`、`/` 为 `200 / 200 / 404`，body 符合约定 | PASS |
+
+重启验收命令、预期码、卸载与恢复步骤继续以 [Phase 6 Operations Runbook](PHASE6_OPERATIONS_RUNBOOK.md) 为准。上述证据闭合了“实际重启并登录 → AtLogOn 自动拉起 → 8788 自动监听 → 本地/固定 PublicBase 有界探测通过”的 6.9 Gate；因此 `PHASE6-STEP6.9-AUTOSTART-OBSERVABILITY: PASS`。
 
 ## 7. Observability / recovery
 
@@ -98,9 +111,9 @@ Phase 4/5 报告中的 `trycloudflare.com` 是不可改写的当次审计证据�
 - Hub：`Get-ScheduledTask`、`Get-ScheduledTaskInfo`、`Get-NetTCPConnection -LocalPort 8788`、`var/service/logs/hub.*.log`。任务 `Running + 267009` 是长期 launcher 正常语义。
 - 恢复顺序：Quick Tunnel 清零 → cloudflared Running/Automatic → Credential Store 三项 PRESENT → 读取首个 Hub bootstrap 错误 → 本地 health/ready/root → 公网固定 PublicBase。未知结果不循环重发、不改 hostname、不降级为持久环境变量。
 
-## 8. Human Action Required
+## 8. 外站操作边界与运营参考
 
-到此触及外站 Hard Stop，不自行登录或修改 GitHub/Grok 控制台。
+本次文档收口没有登录或修改 GitHub/Grok 控制台，没有新增 Webhook/Connector/Reviewer 试跑证据。下表保留为后续运营核对路径，不表示本次执行了这些动作；指导老师已于 2026-09-21 口头确认可按现有 6.8 冻结证据与本次 Human 重启验收收口 Pack E。
 
 | 系统 | 点击/配置路径 | 旧值检查 | 目标值 | 验收 |
 | --- | --- | --- | --- | --- |
@@ -120,26 +133,22 @@ Phase 4/5 报告中的 `trycloudflare.com` 是不可改写的当次审计证据�
 | `python -m pip check` | No broken requirements found |
 | `python scripts/validate_phase0.py --allow-core` | 219/219 contract checks passed；通用 external environment gate 仍为 BLOCKED，不替代本报告的本机证据 |
 | `scripts/windows/Test-GrokBuddyRuntime.ps1` | Task `Running` / `267009`；最终 PID 21160 监听；本地与公网均为 200/200/404，body 全部符合 |
+| Human 重启后再次运行 `Test-GrokBuddyCredentialStore.ps1` / `Test-GrokBuddyRuntime.ps1` | `REBOOT ACCEPTANCE: PASS`；三项 Credential Target 均 `PRESENT`；cloudflared `Running / Automatic`；Hub task `Running / 267009` 且 `HoldsHubProcess=true`；8788 `LISTENING`；本地与公网均为 200/200/404，body 符合约定 |
 | `git diff --check` | PASS |
 | Secret Git 边界 | `git check-ignore` 命中 `.gitignore:14:var/`；未 stage/commit Secret |
 
-全量测试使用本地隔离 fixture；不等于 Windows 重启、公网当前路径或外站 Connector 验收。
+全量测试使用本地隔离 fixture；它本身不等于 Windows 重启、公网当前路径或外站 Connector 验收。重启与公网当前路径的 PASS 由上表单列的 Human 重启后运行输出支持；本次仍没有新增外站 Connector 试跑。
 
 ## 10. 边界与结论
 
 本轮未修改 Domain 状态机、Phase 6.0–6.7 合同数字、业务 Task/RR、Hub DB 业务记录或外站配置；未运行 Grok/WorkBuddy 真审核，未开始 6.20，未 push/merge/approve。
 
-6.8 保持 PASS；6.9 的 Credential Manager、计划任务、当前本地与公网运行态实现已就绪，但 Human 真机重启验收尚未执行，因此状态严格保持 `IMPLEMENTATION READY / WAITING HUMAN REBOOT VALIDATION`；Pack E 仍为 NOT PASS。Pack E PASS 不等于 6.19，也不等于 6.20。未开始 6.20，到此 STOP。
+6.8 保持 PASS。Human 真机重启并登录任务用户后，没有手工启动 Hub；三项 Credential Target、cloudflared、Hub 长期 launcher、8788 监听以及本地/固定 PublicBase 探测均满足验收口径，因此 6.9 为 PASS。指导老师已口头确认可收口，`PHASE6-PACK-E: PASS`。
 
-## 11. Human 仍需执行（重启 Gate）
+`Pack E PASS ≠ 6.17 ≠ 6.19 ≠ 6.20`。本次没有开始或放行 6.17、6.19、6.20；后续仍按 6.17 → 6.19 → 6.20 的独立授权与 Gate 继续，其中 6.19 未 PASS 时不得启动 6.20。到此 STOP。
 
-1. 重启 Windows。
-2. 登录配置 `GrokBuddy Hub` 任务的当前用户。
-3. 不手工启动 Hub，等待 AtLogOn 任务自动拉起。
-4. 在 `D:\Codex\grokbuddy` 运行：
+## 11. 后续步骤（不在本次授权内）
 
-```powershell
-.\scripts\windows\Test-GrokBuddyRuntime.ps1
-```
-
-保存任务 `Running`、8788 自动监听、本地/公网 200/200/404 的输出后，才能复核 6.9 与 Pack E Gate。
+- 6.17：仍待独立授权与对应 Gate，不因 Pack E PASS 自动开始。
+- 6.19：仍待独立 Production Preconditions 验收。
+- 6.20：仍未开始；仅可在 6.19 PASS 后按独立授权执行 Real Final E2E。
