@@ -5,9 +5,18 @@
 ## 1. 配置与 Secret 边界
 
 - 非敏感运行配置：`config/grokbuddy.service.json`。
-- Secret 只在进程环境或 Human 批准的受保护 Windows 凭据设施中提供；不得进入 JSON、计划任务参数、Git、日志或报告。
-- `var/service/hub-secrets.clixml` 被 Git 忽略。它使用创建上下文的 DPAPI；若 Task Scheduler 返回加密上下文错误，停止并由 Human 选择受保护迁移方案。不得自动覆盖或降级为命令行/明文文件。
-- `Start-GrokBuddyHub.ps1` 可读取预先配置的 User 环境，再回退到 DPAPI 文件；仓库脚本不会自行持久化明文 Secret。
+- 正式 Secret Source 是当前登录用户的 Windows Credential Manager Generic Credential（`CRED_TYPE_GENERIC`）。`Get-GrokBuddyCredential.ps1` 只通过 `CredReadW` 读取，并始终用 `CredFree` 释放原生缓冲区。
+- 三个固定 Target 为 `GrokBuddy/GITHUB_WEBHOOK_SECRET`、`GrokBuddy/GROKBUDDY_MCP_TOKEN`、`GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN`。可读且非空才输出 `PRESENT`；任一项 missing、empty 或 unreadable 都 fail closed，不启动 Hub。
+- `Start-GrokBuddyHub.ps1` 只把值注入 launcher/Hub 的 Process 环境。禁止 `setx`，禁止 User/Machine 环境持久化，禁止把值写入 JSON、任务参数、Git、日志或报告。
+- `var/service/hub-secrets.clixml` 被 Git 忽略并保留，但已退出正式启动链路。安装、启动和卸载脚本均不读取、覆盖或删除它。
+
+只读验证（不输出 Secret 或 hash）：
+
+```powershell
+.\scripts\windows\Test-GrokBuddyCredentialStore.ps1
+```
+
+成功时只显示三个 Target 的 `PRESENT`。
 
 ## 2. 清理 Quick Tunnel
 
@@ -31,15 +40,15 @@ sc.exe qc cloudflared
 
 ## 3. Hub 任务安装、启动与卸载
 
-在已安全注入三项进程环境变量的同一 Windows 用户上下文中安装：
+在拥有上述三个 Generic Credential 的当前 Windows 用户上下文中安装：
 
 ```powershell
 .\scripts\windows\Install-GrokBuddyHubTask.ps1
 ```
 
-若 Human 已确认现有 DPAPI 文件可由任务主体解密，可用 `-UseExistingSecrets` 避免覆盖。当前现场的 DPAPI 文件与 Task Scheduler 上下文不兼容，因此在 Human 选择 Windows Credential Manager 或重新封装方案前，不得用此参数宣称自启已通过。
-
 任务触发器是当前用户登录，失败自动按 1 分钟间隔重启最多 10 次。它不等于 LocalSystem 开机前服务；验收口径是“机器重启并登录该用户后自动监听”。
+
+`Start-GrokBuddyHub.ps1` 是长期 launcher：它以前台子进程方式持有 Hub。因此健康运行时任务应为 `Running`，`LastTaskResult=267009 (0x41301 / SCHED_S_TASK_RUNNING)` 是“任务仍在运行”，不应机械要求为 `0`。只有 launcher 已退出时，才把最终退出码作为诊断依据。
 
 停止并卸载任务：
 
@@ -47,7 +56,7 @@ sc.exe qc cloudflared
 .\scripts\windows\Uninstall-GrokBuddyHubTask.ps1
 ```
 
-默认保留受保护 Secret 文件；只有明确要撤销本机凭据时才追加 `-RemoveCredentialFile`。
+卸载脚本只注销任务并停止本仓库 Hub 进程；不会删除 Credential Manager 条目，也不会删除旧 CLIXML 文件。
 
 ## 4. 有界健康检查
 
@@ -76,25 +85,24 @@ Get-NetTCPConnection -State Listen -LocalPort 8788
 
 1. 先运行 `Stop-GrokBuddyQuickRoute.ps1`，确保不存在 `tunnel --url`。
 2. `cloudflared` 不为 Running/Automatic 时，管理员运行安装脚本恢复并复核 `sc.exe qc/qfailure cloudflared`。
-3. 8788 不监听时，先读 `var/service/logs/hub.bootstrap.log`、`hub.stderr.log` 和计划任务 `LastTaskResult`。不要循环重启掩盖首个错误。
-4. 若 bootstrap 报 DPAPI 状态错误，保留原文件，停止自动重试，等待 Human 批准安全凭据迁移。
+3. 8788 不监听时，先运行 `Test-GrokBuddyCredentialStore.ps1`，再读 `var/service/logs/hub.credential.log`、`hub.bootstrap.log`、`hub.stderr.log` 和计划任务状态。不要循环重启掩盖首个错误。
+4. 若凭据测试出现 `credential target missing: GrokBuddy/...`，在 Windows Credential Manager 的当前用户 Generic Credentials 中修复对应 Target；禁止用 User/Machine 环境变量或任务参数绕过 fail-closed。
 5. 8788 已监听后，依次验证本地 health/ready/root；再用 `curl.exe -4` 验证固定 PublicBase。本机若解析到 `198.18.0.0/15`，记录为开发机 Fake-IP 限制，沿用独立网络人工证据，不改 PublicBase。
 
 ## 6. 重启验收模板
 
-重启只能由 Human 明确执行。重启并登录后记录：
+重启只能由 Human 明确执行。重启后登录配置任务的同一用户，不要手工启动 Hub，等待 AtLogOn 任务自行拉起，然后记录：
 
 ```powershell
 Get-Date -Format o
+.\scripts\windows\Test-GrokBuddyCredentialStore.ps1
 Get-Service cloudflared | Format-List Name,Status,StartType
+Get-ScheduledTask -TaskName 'GrokBuddy Hub' | Format-List TaskName,State
 Get-ScheduledTaskInfo -TaskName 'GrokBuddy Hub'
 Get-NetTCPConnection -State Listen -LocalPort 8788
-curl.exe -4 --connect-timeout 2 --max-time 5 -i http://127.0.0.1:8788/health
-curl.exe -4 --connect-timeout 2 --max-time 5 -i http://127.0.0.1:8788/ready
-curl.exe -4 --connect-timeout 2 --max-time 5 -i http://127.0.0.1:8788/
-curl.exe -4 --connect-timeout 3 --max-time 10 -i https://grokbuddy.amirhasan.top/health
-curl.exe -4 --connect-timeout 3 --max-time 10 -i https://grokbuddy.amirhasan.top/ready
-curl.exe -4 --connect-timeout 3 --max-time 10 -i https://grokbuddy.amirhasan.top/
+.\scripts\windows\Test-GrokBuddyRuntime.ps1
 ```
 
-未实际重启时，报告必须写 `NOT RUN`，不能从服务 StartType 或手工重启进程推断通过。
+`Test-GrokBuddyRuntime.ps1` 内每个 curl 都固定 `--connect-timeout 2 --max-time 5`。若需人工展开 HTTP 头，也必须保留 `curl.exe -4` 和不超过 15 秒的硬超时。
+
+未实际重启时，报告必须写 `NOT RUN`，不能从服务 StartType、任务手工启动或进程恢复推断通过。

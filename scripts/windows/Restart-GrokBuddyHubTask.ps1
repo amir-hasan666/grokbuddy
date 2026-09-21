@@ -37,7 +37,7 @@ try {
     }
 
     Start-ScheduledTask -TaskName $TaskName
-    $deadline = (Get-Date).AddSeconds(20)
+    $deadline = (Get-Date).AddSeconds(15)
     $ready = $false
     do {
         Start-Sleep -Milliseconds 500
@@ -51,7 +51,7 @@ try {
     } until ($ready -or (Get-Date) -ge $deadline)
 
     if (-not $ready) {
-        throw 'GrokBuddy Hub did not become ready within 20 seconds.'
+        throw 'GrokBuddy Hub did not become ready within 15 seconds.'
     }
 
     $result = [pscustomobject]@{

@@ -23,6 +23,7 @@ var/
 !.env.example
 *secret*
 *credentials*
+!scripts/windows/Test-GrokBuddyCredentialStore.ps1
 *.pem
 *.key
 *.p12

@@ -1,16 +1,11 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [string]$TaskName = 'GrokBuddy Hub',
-    [string]$SecretsPath,
-    [switch]$RemoveCredentialFile
+    [string]$TaskName = 'GrokBuddy Hub'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not $SecretsPath) {
-    $SecretsPath = Join-Path $repoRoot 'var\service\hub-secrets.clixml'
-}
 
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($task -and $PSCmdlet.ShouldProcess($TaskName, 'stop and unregister scheduled task')) {
@@ -27,9 +22,4 @@ foreach ($process in $hubProcesses) {
     if ($PSCmdlet.ShouldProcess("PID $($process.ProcessId)", 'stop repository Hub process')) {
         Stop-Process -Id $process.ProcessId -Force
     }
-}
-
-if ($RemoveCredentialFile -and (Test-Path -LiteralPath $SecretsPath) -and
-        $PSCmdlet.ShouldProcess($SecretsPath, 'remove DPAPI credential file')) {
-    Remove-Item -LiteralPath $SecretsPath -Force
 }

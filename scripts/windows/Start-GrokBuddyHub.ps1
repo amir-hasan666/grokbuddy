@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ConfigPath,
-    [string]$SecretsPath
+    [string]$ConfigPath
 )
 
 Set-StrictMode -Version Latest
@@ -22,10 +21,6 @@ trap {
 if (-not $ConfigPath) {
     $ConfigPath = Join-Path $repoRoot 'config\grokbuddy.service.json'
 }
-if (-not $SecretsPath) {
-    $SecretsPath = Join-Path $repoRoot 'var\service\hub-secrets.clixml'
-}
-
 $config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 if ($config.publicBase -ne 'https://grokbuddy.amirhasan.top') {
     throw 'The service PublicBase must be https://grokbuddy.amirhasan.top.'
@@ -38,10 +33,6 @@ if (-not (Test-Path -LiteralPath $python)) {
 if (-not (Test-Path -LiteralPath $python)) {
     throw 'No repository Python environment was found.'
 }
-if (-not (Test-Path -LiteralPath $SecretsPath)) {
-    throw "DPAPI secret file is missing: $SecretsPath"
-}
-
 function Set-ProcessSecret {
     param([string]$Name, [Security.SecureString]$Value)
     if ($null -eq $Value) {
@@ -60,24 +51,31 @@ function Set-ProcessSecret {
     }
 }
 
-$requiredSecrets = 'GITHUB_WEBHOOK_SECRET', 'GROKBUDDY_MCP_TOKEN', 'GROKBUDDY_GROK_REVIEWER_TOKEN'
-$userEnvironmentReady = @($requiredSecrets | Where-Object {
-    -not [Environment]::GetEnvironmentVariable($_, 'User')
-}).Count -eq 0
-if ($userEnvironmentReady) {
-    foreach ($name in $requiredSecrets) {
-        [Environment]::SetEnvironmentVariable(
-            $name,
-            [Environment]::GetEnvironmentVariable($name, 'User'),
-            'Process'
-        )
-    }
+$credentialLog = Join-Path $repoRoot 'var\service\logs\hub.credential.log'
+New-Item -ItemType Directory -Path (Split-Path $credentialLog -Parent) -Force | Out-Null
+. (Join-Path $PSScriptRoot 'Get-GrokBuddyCredential.ps1')
+$credentialMappings = [ordered]@{
+    'GrokBuddy/GITHUB_WEBHOOK_SECRET' = 'GITHUB_WEBHOOK_SECRET'
+    'GrokBuddy/GROKBUDDY_MCP_TOKEN' = 'GROKBUDDY_MCP_TOKEN'
+    'GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN' = 'GROKBUDDY_GROK_REVIEWER_TOKEN'
 }
-else {
-    $protected = Import-Clixml -LiteralPath $SecretsPath
-    Set-ProcessSecret -Name 'GITHUB_WEBHOOK_SECRET' -Value $protected.GITHUB_WEBHOOK_SECRET
-    Set-ProcessSecret -Name 'GROKBUDDY_MCP_TOKEN' -Value $protected.GROKBUDDY_MCP_TOKEN
-    Set-ProcessSecret -Name 'GROKBUDDY_GROK_REVIEWER_TOKEN' -Value $protected.GROKBUDDY_GROK_REVIEWER_TOKEN
+foreach ($target in $credentialMappings.Keys) {
+    $credential = $null
+    try {
+        $credential = Get-GrokBuddyCredential -Target $target
+        Set-ProcessSecret -Name $credentialMappings[$target] -Value $credential
+        Add-Content -LiteralPath $credentialLog -Value "$(Get-Date -Format o) PRESENT: $target" -Encoding UTF8
+    }
+    catch {
+        $safeMessage = "credential target missing: $target"
+        Add-Content -LiteralPath $credentialLog -Value "$(Get-Date -Format o) $safeMessage" -Encoding UTF8
+        exit 1
+    }
+    finally {
+        if ($null -ne $credential) {
+            $credential.Dispose()
+        }
+    }
 }
 $env:PUBLIC_BASE = $config.publicBase
 

@@ -48,7 +48,21 @@ if ($listener.Count -eq 0) {
 $result = [ordered]@{
     CheckedAt = (Get-Date -Format o)
     Cloudflared = if ($service) { [ordered]@{ State=[string]$service.Status; StartMode=[string]$service.StartType } } else { $null }
-    HubTask = if ($task) { [ordered]@{ State=[string]$task.State; LastRunTime=$taskInfo.LastRunTime; LastTaskResult=$taskInfo.LastTaskResult } } else { $null }
+    HubTask = if ($task) {
+        [ordered]@{
+            State = [string]$task.State
+            LastRunTime = $taskInfo.LastRunTime
+            LastTaskResult = $taskInfo.LastTaskResult
+            HoldsHubProcess = ([string]$task.State -eq 'Running')
+            ResultMeaning = if ([string]$task.State -eq 'Running' -and $taskInfo.LastTaskResult -eq 267009) {
+                'SCHED_S_TASK_RUNNING (expected for the long-lived launcher)'
+            }
+            else {
+                'Inspect only after the task exits; a healthy long-lived launcher is normally Running.'
+            }
+        }
+    }
+    else { $null }
     Port8788 = @($listener | Select-Object LocalAddress,LocalPort,OwningProcess)
     Local = [ordered]@{
         Health = Get-HttpProbe 'http://127.0.0.1:8788/health'
@@ -64,7 +78,7 @@ $result = [ordered]@{
 $result | ConvertTo-Json -Depth 6
 
 $ok = $service -and $service.Status -eq 'Running' -and $service.StartType -eq 'Automatic' -and
-    $task -and $listener.Count -gt 0 -and
+    $task -and [string]$task.State -eq 'Running' -and $listener.Count -gt 0 -and
     $result.Local.Health.Code -eq '200' -and $result.Local.Health.Body -eq '{"status": "ok"}' -and
     $result.Local.Ready.Code -eq '200' -and $result.Local.Ready.Body -match '"status": "ready"' -and
     $result.Local.Root.Code -eq '404' -and $result.Local.Root.Body -eq '{"error": "not_found"}' -and
