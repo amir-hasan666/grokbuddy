@@ -2,6 +2,8 @@
 
 # Phase 5 Functional Exit 证据报告
 
+> **HISTORICAL：** 本文 `trycloudflare.com` PublicBase 只对应当次试跑。Phase 6 正式入口为 `https://grokbuddy.amirhasan.top`。
+
 本结论对应下述 Worker 上传和 Final Review Request（RR）探针的功能闭环。证据以本机两个 Hub runtime 的只读记录、既有 [Phase 5 Step 11–12 结果](PHASE5_STEP11_12_RESULT.md)及当次运行回执为准；不将探针结果扩展为 Phase 6 或生产环境验收。
 
 ## A. Worker 上传探针

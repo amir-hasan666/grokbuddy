@@ -1,0 +1,8 @@
+{
+  "contractsDir": "docs/contracts",
+  "host": "127.0.0.1",
+  "port": 8788,
+  "publicBase": "https://grokbuddy.amirhasan.top",
+  "reviewerActor": "grok-reviewer-b",
+  "runtimeDir": "var/github-manual"
+}

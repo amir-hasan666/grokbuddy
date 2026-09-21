@@ -156,11 +156,13 @@ class OriginalWebhookASGIBridge:
 class CompositeApplication:
     """Route exact Phase 4 paths while preserving the original webhook WSGI app."""
 
-    def __init__(self, webhook_app, mcp_app, mcp_token, grok_reviewer_app=None):
+    def __init__(self, webhook_app, mcp_app, mcp_token, grok_reviewer_app=None,
+                 readiness_check=None):
         self.webhook_app = OriginalWebhookASGIBridge(webhook_app)
         self.mcp_app = mcp_app
         self.authenticated_mcp_app = BearerTokenBoundary(mcp_app, mcp_token)
         self.grok_reviewer_app = grok_reviewer_app
+        self.readiness_check = readiness_check
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
@@ -180,6 +182,30 @@ class CompositeApplication:
                 )
                 return
             await _json_response(send, 200, {"status": "ok"})
+            return
+        if path == "/ready":
+            if scope.get("method") != "GET":
+                await _json_response(
+                    send,
+                    405,
+                    {"error": "method_not_allowed"},
+                    extra_headers=((b"allow", b"GET"),),
+                )
+                return
+            ready = False
+            if self.readiness_check is not None:
+                try:
+                    ready = bool(await anyio.to_thread.run_sync(self.readiness_check))
+                except Exception:
+                    ready = False
+            await _json_response(
+                send,
+                200 if ready else 503,
+                {
+                    "checks": {"database": "ok" if ready else "unavailable"},
+                    "status": "ready" if ready else "not_ready",
+                },
+            )
             return
         if path == "/mcp":
             await self.authenticated_mcp_app(scope, receive, send)
@@ -223,11 +249,17 @@ def create_composite_application(
         ),
         host="127.0.0.1",
     )
+
+    def database_ready():
+        with runtime.db.connect() as connection:
+            return connection.execute("SELECT 1").fetchone() == (1,)
+
     application = CompositeApplication(
         GitHubWebhookApplication(runtime, webhook_secret),
         mcp_app,
         mcp_token,
         grok_reviewer_app,
+        database_ready,
     )
     application.remote_server = remote_server
     return application

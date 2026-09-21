@@ -118,7 +118,7 @@ def test_composite_refuses_to_create_public_mcp_without_token(runtime):
 
 
 def test_public_host_allowlist_keeps_sdk_rebinding_protection(runtime):
-    public_host = "existing-phase4.trycloudflare.com"
+    public_host = "grokbuddy.amirhasan.top"
     composite = create_composite_application(
         runtime, WEBHOOK_SECRET, MCP_TOKEN, public_hosts=[public_host]
     )
@@ -134,7 +134,7 @@ def test_public_host_allowlist_keeps_sdk_rebinding_protection(runtime):
                 rejected = await client.post(
                     "/mcp",
                     json=payload,
-                    headers={**common, "host": "unlisted.trycloudflare.com"},
+                    headers={**common, "host": "unlisted.example.test"},
                 )
                 accepted = await client.post(
                     "/mcp",
@@ -170,6 +170,8 @@ def test_composite_preserves_webhook_status_and_side_effects(runtime):
             transport=transport, base_url="http://127.0.0.1:8788"
         ) as client:
             health = await client.get("/health")
+            ready = await client.get("/ready")
+            root = await client.get("/")
             valid = await client.post(
                 "/webhooks/github",
                 content=body,
@@ -190,11 +192,15 @@ def test_composite_preserves_webhook_status_and_side_effects(runtime):
                     "x-hub-signature-256": "sha256=" + "0" * 64,
                 },
             )
-            return health, valid, invalid
+            return health, ready, root, valid, invalid
 
-    health, valid, invalid = anyio.run(exercise)
+    health, ready, root, valid, invalid = anyio.run(exercise)
     assert health.status_code == 200
     assert health.json() == {"status": "ok"}
+    assert ready.status_code == 200
+    assert ready.json() == {"checks": {"database": "ok"}, "status": "ready"}
+    assert root.status_code == 404
+    assert root.json() == {"error": "not_found"}
     assert valid.status_code == direct_status == 202
     assert valid.json()["result"]["status"] == direct_body["result"]["status"] == "IGNORED"
     assert invalid.status_code == 401
@@ -228,6 +234,32 @@ def test_composite_preserves_oversize_webhook_rejection(runtime):
     response = anyio.run(exercise)
     assert response.status_code == int(captured["status"].split(" ", 1)[0]) == 413
     assert response.content == direct_body
+
+
+def test_readiness_failure_is_503_without_affecting_liveness(runtime):
+    composite = create_composite_application(runtime, WEBHOOK_SECRET, MCP_TOKEN)
+
+    def unavailable():
+        raise RuntimeError("database detail must not escape")
+
+    composite.readiness_check = unavailable
+
+    async def exercise():
+        transport = httpx2.ASGITransport(app=composite)
+        async with httpx2.AsyncClient(
+            transport=transport, base_url="http://127.0.0.1:8788"
+        ) as client:
+            return await client.get("/health"), await client.get("/ready")
+
+    health, ready = anyio.run(exercise)
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
+    assert ready.status_code == 503
+    assert ready.json() == {
+        "checks": {"database": "unavailable"},
+        "status": "not_ready",
+    }
+    assert "database detail" not in ready.text
 
 
 def test_composite_signed_synchronize_preserves_review_request_side_effect(runtime):
