@@ -1,38 +1,41 @@
-# 仓库长期规则
+# GrokBuddy AGENTS
 
-Phase 3.5 Real GitHub Integration 已于 2026-09-18 通过真实外部 Gate；PR #2 与 `phase35-probe` 保持打开。Phase 4 Remote MCP 只读本机与当次 Quick Tunnel 公网 Gate 已通过，详见 [Remote MCP 报告](docs/PHASE4_REMOTE_MCP_REPORT.md)。Human 于 2026-09-20 进一步授权真 Grok Adapter、认证写回和 Reviewer B 路由；本地实现与证据见 [Grok Adapter 报告](docs/PHASE4_GROK_ADAPTER_REPORT.md)。PR #4 的旧 Mock RR 已通过正式 TimeoutService 转 `TIMED_OUT`，Task 转 `ESCALATED`；未来请求路由指向 B。专用 B Secret 当前缺失，未创建新 RR、未触发真实 Grok 或 GitHub 请求 Comment，Functional Exit 尚未通过。只按 [试跑 runbook](docs/PHASE4_GROK_RUNBOOK.md)和当前 Human 授权继续；仍禁止 ACP、Phase 5/6、merge/approve、修改 `main`、删除探针分支、直接 DB DML、伪造 Reviewer 结果及其他高风险 GitHub 写操作，也不得脏改 Phase 0–3 冻结状态机、命令幂等、backup、provider_id、Source of Truth 或既有 stdio MCP/HTTP/CLI 行为。
+跨阶段长期规则。Phase / Gate / PASS 进度只看
+[docs/CURRENT_PRODUCTION_BASELINE.md](docs/CURRENT_PRODUCTION_BASELINE.md)
+与带日期的 Phase 报告；本文件不改写历史结论。
 
-## Architecture / Async Review
+## 硬规则（违反即停）
 
-- Collaboration Hub 数据库是唯一事实源。GitHub 是通信、展示和审计投影，不可通过标签、PR 状态、正文或评论顺序决定业务状态。
-- Domain 不依赖 MCP、GitHub、Grok。入口经 Application Service 调用 Domain；ReviewerAdapter 必须可替换。
-- Reviewer 一律 request → PENDING → event → COMPLETED/FAILED/TIMED_OUT。请求提交只持久化并立即返回，不等待最终 verdict；禁止同步 `review() -> verdict`。
-- MockReviewer 必须走同一 ReviewRequest、normalized event、handler、状态迁移及 Audit，不得同步返回 PASS。
-- 状态、Audit、Outbox 原子提交；外部请求不占用数据库长事务。拒绝非法跳转，Task State、Review Request Status、Verdict 三者分离。
+1. **Hub 是唯一业务 SoT**。GitHub / Reviewer / 前端只是通道或投影，不得反推 Task/Review 终态。
+2. **正式证据 Manual Glue = 0**：禁止 `LocalRuntime`、mock、`run_until_idle`、`*_once`、pipeline-drive 正式路径、手 POST wake、直接 DB DML、Human Continue 冒充 Reviewer PASS。
+3. **身份分离**：Builder ≠ Reviewer ≠ Human；禁止 Builder 凭证冒充 Reviewer。
+4. **Review 异步 + fail-closed**：adapter（含 mock）不得同步伪造 verdict；未知协议版本 / 校验失败则拒绝。
+5. **密钥不进**源码、Git、聊天、日志、Artifact 明文、Audit 摘要、公开 Comment。
+6. **未授权禁止**：生产 DDL/DML、部署/重启/删资源、改防火墙、GitHub merge/approve/push/force-push、改默认分支。
+7. **合同优先**：与 `docs/contracts/` 冲突时报 drift，禁止用「当前代码」迁就改合同。
 
-## GitHub / Identity / Artifact
+## 正式链（本仓库默认；用户需求保持短句）
 
-- 不假定 Issue/PR Comment 能唤醒 Grok；必须验证当前账号的实际 wake-up channel，证据参见 [能力登记](docs/CAPABILITY_VERIFICATION.md)。
-- Builder、Reviewer、Human、System 身份可区分。生产同一 GitHub actor 不能既提交又审核；不能用 Builder 凭据代发并声称来自 Reviewer。
-- Comment 仅允许版本 marker、metadata、短摘要、artifact pointer。完整 diff、日志、长 SQL、原始 Review JSON 等进入 Artifact Store。
-- Artifact 必须不可变、有 hash、受控 pointer 和 Hub 元数据；不得把其内容放进 Audit。
+- 默认走 **GrokBuddy 正式链**：真 Reviewer = `grok-reviewer-b`（REVIEWER_HTTP / wake）。
+- 用户侧足够：`走 GrokBuddy。帮我做：…` 或 Hub 已有任务时 `按流水线走完。`  
+  **禁止**要求用户每次粘贴本文件约束。
+- 开干前自检：无 mock-reviewer、无主动降级、个性化规则若与本文冲突 → **停并报告**。
+- 产品闸见 [docs/PRODUCT_PATH_V1.md](docs/PRODUCT_PATH_V1.md)：
+  - 方案未 PASS **禁止写代码**
+  - 方案/终审各最多两轮；R1 可建议，R2 仅 PASS/BLOCKED；无方向性问题不得 BLOCKED
+  - 方案 R2 BLOCKED：停写；展示 WB方案1 / Grok意见1 / WB方案2 / Grok理由2，等 Human
+  - 终审 PASS：展示操作方法 + 文件；终审 R2 BLOCKED：仍展示产物 + 理由，并标明未验收通过
+- `PRODUCT_PATH_V1.md` 缺失 → 停，请 Human/Codex 补齐，不得自制平行流程。
 
-## State / Finding / Audit / Protocol
+## 工作方式
 
-- `finding_id` 永久稳定，Hub 生成；展示 R001 不是主键。复审保留 ID；新问题另建，替代/拆分保留关联，不覆盖旧 Review/Finding 历史。
-- Audit append-only，记录真实 actor 和关联 ID；任何 waiver、override、人工审批均留痕。
-- 协议版本化；未知/缺失版本拒绝，校验失败不推进 Task。结构和语义校验都必须通过，不从自然语言猜 verdict。
-- 达到审核轮次/超时/任务时长边界转 ESCALATED，停止自动 Reviewer。重投递不等于新一轮，人工恢复必须显式审计。
-- Review Profile 规则只有 Hub 一个正式来源；Skill 引用带版本快照，不复制业务规则。
+- 先读 Baseline，再按需打开 skills：`architecture-gate` / `phase-execution` / `review-protocol-validator` / `async-workflow-test`。
+- 只做 Human 明确授权的范围；Roadmap/旧报告/测试用例 ≠ 新授权。
+- 状态机细节不复制：见 [STATE_MACHINE.md](STATE_MACHINE.md) 与 contracts。
+- 本地单测/fixture/mock 只证明其覆盖范围，不得外推为生产全通。
 
-## Safety / Security / External Capabilities
+## 常用命令
 
-- 危险生产动作须 AWAITING_HUMAN_APPROVAL，审批绑定动作、环境、对象、hash、范围、期限与批准人。Review PASS 或 HUMAN_OVERRIDE 不等于执行授权。
-- 禁止无审批自动生产 DDL/DML、部署、重启、删除资源、覆盖配置、改防火墙或权限。Prompt、Hub 状态机与真实权限三层均控制。
-- Reviewer 仅 READ/REVIEW/COMMENT，无生产写入、管理、部署、删除、重启权限。Secret 不进源码、日志、Artifact 或审计摘要。
-- 不编造 Grok Bot/WorkBuddy API、GitHub event、MCP capability 或第三方能力；未实测标 UNVERIFIED / ENVIRONMENT_VALIDATION_REQUIRED，官方支持不等于当前环境通过。
-- 验证应说明范围；静态契约检查不能证明服务运行、真实 MCP、Grok 唤醒、GitHub 回传或生产安全已通过。
-
-## 项目工作流
-
-按任务需要读取 `skills/architecture-gate`、`skills/phase-execution`、`skills/review-protocol-validator`、`skills/async-workflow-test` 下的 SKILL.md。它们提供操作步骤；长期约束以本文件为维护入口，不建立第二份规则源。每阶段开始说明目标/文件/决策/风险/依赖，结束记录变更、命令、结果、未验证项及下一阶段，未经授权不跨阶段。
+```bash
+# 相关测试子集（按改动选择）
+python -m pytest tests/test_phase6_supervisor_production_wiring.py tests/test_phase6_supervisor_recovery.py -q

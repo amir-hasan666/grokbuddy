@@ -50,6 +50,10 @@ class DeliveryUnknown(HubError):
     code = "DELIVERY_UNKNOWN"
 
 
+class ReviewDeliveryUnavailable(HubError):
+    code = "REVIEW_DELIVERY_UNAVAILABLE"
+
+
 class Role(StrEnum):
     BUILDER = "BUILDER"
     REVIEWER = "REVIEWER"

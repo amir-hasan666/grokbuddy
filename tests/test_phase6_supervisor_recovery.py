@@ -173,6 +173,65 @@ def test_p04_hub_restart_recovers_committed_outbox_and_inbox_exactly_once(tmp_pa
     assert rows(after_apply, 'inbox_events', review_request_id=second_rr)[0]['status'] == 'APPLIED'
 
 
+def test_p04b_two_task_interleaved_duplicate_restart_apply_isolated(tmp_path):
+    directory = tmp_path / 'p04b-two-task-isolation'
+    task_a = V2Flow(directory)
+    task_a.plan()
+    task_b = V2Flow(directory)
+
+    def snapshot(task_id):
+        with task_a.r.db.transaction() as repo:
+            requests = repo.find('review_requests', task_id=task_id)
+            request_ids = {item['id'] for item in requests}
+            return {
+                'task': deepcopy(repo.get('tasks', task_id)),
+                'review_requests': requests,
+                'review_rounds': repo.find('review_rounds', task_id=task_id),
+                'reviews': repo.find('reviews', task_id=task_id),
+                'findings': repo.find('review_findings', task_id=task_id),
+                'artifacts': repo.find('artifacts', task_id=task_id),
+                'assignments': repo.find('worker_assignments', task_id=task_id),
+                'audit': repo.find('audit_logs', task_id=task_id),
+                'events': repo.find('task_events', task_id=task_id),
+                'outbox': [item for item in repo.find('outbox_events')
+                           if item['review_request_id'] in request_ids],
+                'inbox': [item for item in repo.find('inbox_events')
+                          if item['task_id'] == task_id],
+            }
+
+    before_b = snapshot(task_b.task_id)
+    assert before_b['task']['state'] == 'NEW'
+    command_key = key()
+    request_args = (
+        task_a.owner, task_a.task_id, 'PLAN_REVIEW', 'mock-reviewer',
+        task_a.version, command_key)
+    first = task_a.r.hub.request_review(*request_args)
+    assert task_a.r.hub.request_review(*request_args) == first
+    request_id = first['review_request_id']
+    task_a.r.mock.configure(request_id, 'PASS')
+    assert task_a.r.dispatcher.dispatch_one() == 'SENT'
+    assert task_a.r.mock.run_one(request_id) == 'PASS'
+
+    restarted = LocalRuntime(
+        directory, CONTRACTS, clock=task_a.r.clock,
+        trigger_source_key=TRIGGER_KEY)
+    assert restarted.events.handle_one() == 'APPLIED'
+    assert restarted.events.handle_one() is None
+
+    after_b = snapshot(task_b.task_id)
+    assert after_b == before_b
+    assert restarted.hub.get_task(task_b.task_id)['state'] == 'NEW'
+    assert len(rows(restarted, 'review_requests', task_id=task_a.task_id)) == 1
+    assert len(rows(restarted, 'review_rounds', task_id=task_a.task_id)) == 1
+    assert len(rows(restarted, 'reviews', task_id=task_a.task_id)) == 1
+    assert len(rows(restarted, 'outbox_events', review_request_id=request_id)) == 1
+    receipts = [item for item in rows(restarted, 'command_receipts')
+                if item['operation'] == 'request_review'
+                and item['response'].get('review_request_id') == request_id]
+    assert len(receipts) == 1
+    assert restarted.hub.get_task(task_a.task_id)['state'] == 'PLAN_APPROVED'
+
+
 def test_p05_worker_restart_recovers_expired_lease_without_late_completion(tmp_path):
     flow = V2Flow(tmp_path / 'p05')
     approve_plan(flow)

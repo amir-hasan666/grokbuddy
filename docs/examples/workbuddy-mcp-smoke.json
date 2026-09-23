@@ -6,13 +6,15 @@
       "args": [
         "D:\\Codex\\grokbuddy\\scripts\\grokbuddy_mcp.py",
         "--runtime-dir",
-        "D:\\Codex\\grokbuddy\\var\\workbuddy-mcp",
+        "D:\\Codex\\grokbuddy\\var\\github-manual",
         "--contracts-dir",
         "D:\\Codex\\grokbuddy\\docs\\contracts",
         "--actor",
         "builder",
         "--human-actor",
-        "human"
+        "human",
+        "--default-reviewer-actor",
+        "grok-reviewer-b"
       ],
       "env": {
         "PYTHONUTF8": "1"

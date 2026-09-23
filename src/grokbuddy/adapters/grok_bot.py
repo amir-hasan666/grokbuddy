@@ -17,7 +17,8 @@ _RUN = re.compile(r"[A-Za-z0-9._:-]{1,200}\Z")
 
 
 class GrokBotReviewerAdapter:
-    def __init__(self, db, transport, clock, *, reviewer_actor_id, agent_id, server_id, public_base_url):
+    def __init__(self, db, transport, clock, *, reviewer_actor_id, agent_id, server_id,
+                 public_base_url, http_intake=None):
         if not isinstance(public_base_url, str):
             raise HubError('Grok Reviewer public base must be an HTTPS origin')
         parsed = urlsplit(public_base_url)
@@ -30,6 +31,7 @@ class GrokBotReviewerAdapter:
         self.reviewer_actor_id = reviewer_actor_id
         self.agent_id, self.server_id = agent_id, server_id
         self.public_base_url = public_base_url.rstrip('/')
+        self.http_intake = http_intake
 
     @staticmethod
     def _marker(request_id):
@@ -37,7 +39,7 @@ class GrokBotReviewerAdapter:
             raise HubError('Review request ID is invalid')
         return f'<!-- grokbuddy-grok-request:{request_id} -->'
 
-    def _binding(self, request_id):
+    def _target(self, request_id):
         with self.db.transaction() as repo:
             rr = repo.get('review_requests', request_id)
             task = repo.get('tasks', rr['task_id'])
@@ -53,8 +55,14 @@ class GrokBotReviewerAdapter:
                 raise HubError('Review request is not routed to configured Grok Reviewer')
             route = repo.find('grok_reviewer_routes', task_id=rr['task_id'])
             binding = repo.find('github_bindings', task_id=rr['task_id'])
-            if (not route or route[0]['reviewer_actor_id'] != self.reviewer_actor_id
-                    or not binding or route[0]['binding_id'] != binding[0]['id']):
+            channel = rr.get('delivery_channel')
+            if channel == 'REVIEWER_HTTP':
+                if rr.get('protocol_version') != 'v2':
+                    raise HubError('Frozen HTTP Reviewer delivery contract is invalid')
+                return None, rr
+            if (channel not in (None, 'GITHUB_COMMENT')
+                    or len(route) != 1 or route[0]['reviewer_actor_id'] != self.reviewer_actor_id
+                    or len(binding) != 1 or route[0].get('binding_id') != binding[0]['id']):
                 raise HubError('Grok Reviewer route or PR binding is missing')
             return binding[0], rr
 
@@ -66,7 +74,11 @@ class GrokBotReviewerAdapter:
                           f'request_pointer={self.public_base_url}/reviewer/requests/{delivery_key}'))
 
     def get_delivery_status(self, delivery_key):
-        binding, rr = self._binding(delivery_key)
+        binding, rr = self._target(delivery_key)
+        if binding is None:
+            if self.http_intake is None:
+                raise HubError('HTTP Reviewer delivery is not configured')
+            return self.http_intake.delivery_status(delivery_key)
         try:
             comment = self.transport.find_comment(binding, self._marker(delivery_key))
         except GitHubCommentTransportError as exc:
@@ -80,9 +92,14 @@ class GrokBotReviewerAdapter:
     def submit_review_request(self, envelope, delivery_key):
         if envelope.get('review_request_id') != delivery_key:
             raise HubError('Delivery key does not match frozen request')
-        binding, rr = self._binding(delivery_key)
+        binding, rr = self._target(delivery_key)
         if envelope != rr['envelope']:
             raise HubError('Submitted envelope differs from frozen request')
+        if binding is None:
+            if self.http_intake is None:
+                raise HubError('HTTP Reviewer delivery is not configured')
+            self.http_intake.publish(delivery_key)
+            return DeliveryReceipt('ACCEPTED')
         marker = self._marker(delivery_key)
         body = self._body(envelope, delivery_key)
         if len(body.encode('utf-8')) > 4096:

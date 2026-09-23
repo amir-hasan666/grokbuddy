@@ -1,7 +1,8 @@
 """Focused local tests for the dedicated WorkBuddy trigger ingress."""
 
+import json
 import os
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import sys
 from uuid import uuid4
 
@@ -19,8 +20,32 @@ from grokbuddy.interfaces.ingress_mcp import (
 )
 
 
-KEY_TEXT = 'test-only-placeholder-key_text-22'
+KEY_TEXT = 'test-only-placeholder-key_text-23'
 KEY = KEY_TEXT.encode('utf-8')
+
+
+def test_workbuddy_mcp_examples_follow_service_runtime_source_of_truth():
+    root = Path(__file__).resolve().parents[1]
+    service = json.loads(
+        (root / 'config' / 'grokbuddy.service.json').read_text(encoding='utf-8'))
+    assert service['runtimeDir'] == 'var/github-manual'
+    assert service['publicBase'] == 'https://grokbuddy.amirhasan.top'
+
+    expected = str(PureWindowsPath(r'D:\Codex\grokbuddy') /
+                   PureWindowsPath(service['runtimeDir']))
+    ingress = json.loads((root / 'docs' / 'examples' /
+                          'workbuddy-ingress-mcp.example.json').read_text(encoding='utf-8'))
+    hub = json.loads((root / 'docs' / 'examples' /
+                      'workbuddy-mcp-smoke.json').read_text(encoding='utf-8'))
+    ingress_args = ingress['mcpServers']['grokbuddy-ingress']['args']
+    hub_args = hub['mcpServers']['grokbuddy-hub']['args']
+    assert ingress_args[ingress_args.index('-RuntimeDir') + 1] == expected
+    assert hub_args[hub_args.index('--runtime-dir') + 1] == expected
+
+    launcher = (root / 'scripts' / 'windows' /
+                'Start-GrokBuddyIngressMcp.ps1').read_text(encoding='utf-8')
+    assert 'config\\grokbuddy.service.json' in launcher
+    assert '$serviceConfig.runtimeDir' in launcher
 
 
 def counts(runtime):
@@ -111,7 +136,7 @@ async def test_ingress_without_source_key_fails_closed_before_mutation(tmp_path)
 async def test_ingress_rejects_changed_input_for_a_reused_idempotency_key(
         ingress_runtime):
     server = create_ingress_mcp_server(ingress_runtime)
-    key = 'test-only-placeholder-key-114'
+    key = 'test-only-placeholder-key-139'
     async with Client(server, mode='legacy', raise_exceptions=False) as client:
         first = await client.call_tool('create_triggered_task', {
             'segments': [{'source': 'user_body', 'text': PHRASE + '，原始请求。'}],

@@ -137,7 +137,7 @@ class ClientGateway:
 
     def _request_plan_review(self, payload):
         _strict(payload, {"task_id", "expected_version", "idempotency_key"}, {"reviewer_id"})
-        reviewer_id = payload.get("reviewer_id", "mock-reviewer")
+        reviewer_id = payload.get("reviewer_id", self.runtime.default_reviewer_actor_id)
         if not isinstance(reviewer_id, str) or not reviewer_id:
             raise HubError("reviewer_id must be a non-empty string")
         return self.hub.request_review(
@@ -243,7 +243,7 @@ class ClientGateway:
         )
         if type(payload["begin_execution"]) is not bool:
             raise HubError("begin_execution must be a boolean")
-        reviewer_id = payload.get("reviewer_id", "mock-reviewer")
+        reviewer_id = payload.get("reviewer_id", self.runtime.default_reviewer_actor_id)
         if not isinstance(reviewer_id, str) or not reviewer_id:
             raise HubError("reviewer_id must be a non-empty string")
         task_id = _text(payload, "task_id")

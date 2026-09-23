@@ -1,5 +1,19 @@
 # WorkBuddy 接入验证与设计
 
+## Phase 6.20 ingress owner / Hub Builder 驱动边界（2026-09-22）
+
+6.20 首次真机推进暴露的阻断不是点火或 Worker claim 问题：正式 SoT `var/github-manual/hub.db` 中的 Task 已由专用 `workbuddy-ingress` 正确创建，`owner_id=workbuddy-ingress`、协议 v2、trigger anchors 齐全；但普通 `grokbuddy-hub` 固定以 `builder` 调用 Plan/Final Application 命令，旧 `task_for()` 把 `owner_id` 同时当作创建者和唯一驱动者，因此正确身份的 Hub Builder 被误拒为 `Task belongs to another Builder`。把 Worker legacy claim 打开或修改 `Task.owner_id` 都不是修复。
+
+Application 层现将两种语义分开：
+
+- `owner_id` 继续保存创建者 `workbuddy-ingress`，全流程不转移、不覆盖；`create_task` 的 dedicated ingress + trigger 双检保持原样。
+- `LocalRuntime` / `Hub` 的 `ingress_driver_actor_ids` 是驱动 allowlist，默认只有现有 `grokbuddy-hub` principal `builder`。该 actor 还必须是无 `worker_type`、无 `trigger_source` 的普通 Builder。
+- 非 owner 驱动只对同时满足以下冻结锚点的 Task 生效：owner 是 `workbuddy-ingress`、`grokbuddy_enabled=true`、`review_protocol_version=v2`、conversation/message 与 trigger evidence 一致、source Artifact ID/hash 已冻结。普通 v1/非 ingress Task 仍严格要求 `owner_id == actor.id`；其他 Builder 与 Worker 不继承权限。
+- 权限仍经原 `task_for()` 进入所有 Builder Application 命令，所以 Plan/Final Artifact、Plan 提交、Review 请求、Finding 响应、自检、Final package 和需要的治理动作保留同一 CAS/Audit/状态机路径；未新增旁路、第二事实源或 sticky conversation 授权。
+- Plan PASS 后，Hub Builder 仍通过正式 `PLAN_APPROVED → EXECUTING` 命令原子创建 v2 `worker_assignments`；Worker claim/progress/complete 使用 assignment version/lease/CAS，legacy `NEW + owner transfer` 默认继续拒绝。Supervisor 的 outbox、intake、event APPLY 不读取 `owner_id`，本地同 Task Plan→Worker→Final→DONE 用例覆盖了这一点。
+
+仓内隔离测试现为 `LOCAL PASS`，真实 WorkBuddy 6.20 尚未重跑，因此状态只能是 `WAITING HUMAN RETEST`。Human 若保留原 Task，可在同 conversation 继续短句；也可先 Abort 再以新的精确 trigger 建单。期望 `submit_plan` 不再出现 owner 拒绝，随后产生 Plan RR、v2 assignment、Final RR，并以 Hub DB/Audit 为证；Human 重测前不得把 6.20 标记为 PASS。完整差距、命令和证据见 [Ingress Builder Drive 报告](PHASE6_INGRESS_BUILDER_DRIVE_UNBLOCK_REPORT.md)。
+
 ## Phase 6 trigger ingress 接线（2026-09-21）
 
 6.17-B 的现场失败不是 Hub 守卫缺陷：当前用户级 `mcp.json` 只有 `grokbuddy-hub`（固定 `builder`）和 `grokbuddy-worker`（固定 `workbuddy-worker`）。普通 Hub 的 `create_task` 即使收到调用方提供的 `trigger_evidence`，也必须因 actor 不是 `workbuddy-ingress` 而返回 `PERMISSION_FAILURE`；Worker surface 根本不暴露建单工具。
@@ -71,7 +85,7 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 |---|---|---|
 | create_task | description、profile、idempotency_key | task snapshot、NEW、version |
 | get_task | task_id | 权威快照 |
-| submit_plan | task_id、plan artifact、expected_version、idempotency_key | task snapshot |
+| submit_plan | task_id、plan_artifact_id、approved_scope、expected_version、idempotency_key | task snapshot |
 | request_plan_review | task_id、expected_version、idempotency_key | RR ID、PENDING |
 | get_plan_review | RR ID | RR status、result/null |
 | respond_to_review | task_id、review_id、finding_id、action、证据、version、key | Finding 收据；不自动重审 |
@@ -82,6 +96,38 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 | close_task | task_id、reason、version、key | Human audit + CANCELLED |
 
 `request_plan_review` / `request_final_review` 只提交 durable request 并返回 `PENDING`；完成结果只能通过 `get_*` 查询。相同 command idempotency key 在 stdio 进程重启后返回同一 Task/ReviewRequest，不创建新轮次。
+
+`submit_plan` 的 `approved_scope` 是必填的非空结构化对象，只允许 `summary`、`files`、`components`；至少提供一项，`files/components` 如出现则必须是非空字符串数组。Plan Artifact 上传时 `artifact_type` 必须使用大写 `PLAN`。MCP 调用示例：
+
+```json
+{
+  "tool": "submit_artifact",
+  "arguments": {
+    "task_id": "TASK-...",
+    "artifact_type": "PLAN",
+    "content_text": "Bounded implementation plan",
+    "idempotency_key": "stable-upload-key"
+  }
+}
+```
+
+```json
+{
+  "tool": "submit_plan",
+  "arguments": {
+    "task_id": "TASK-...",
+    "plan_artifact_id": "ART-...",
+    "approved_scope": {
+      "summary": "Bounded MCP hotfix",
+      "files": ["src/grokbuddy/interfaces/mcp.py"]
+    },
+    "expected_version": 1,
+    "idempotency_key": "stable-submit-plan-key"
+  }
+}
+```
+
+若调用结果不明确或修复前已得到 scope 校验错误，必须以完全相同的 `idempotency_key` 重试；不能因此新建 Task。
 
 MCP 进程固定普通工具为本地 `builder` principal，`close_task` 固定为本地 `human` principal；payload 不接受 actor。`close_task` 仍调用原 Human cancel guard，不等同 Review PASS/HUMAN_OVERRIDE。该映射只适用于受信本机 Mock 环境，不是生产认证。
 

@@ -126,6 +126,7 @@ def _restore_original(env):
         "127.0.0.1",
         "--port",
         str(PORT),
+        "--disable-supervisor",
     ]
     flags = (
         subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW

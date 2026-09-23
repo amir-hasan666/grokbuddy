@@ -9,6 +9,7 @@ from grokbuddy.domain.model import HubError, PermissionDenied
 
 _REQUEST = re.compile(r"/reviewer/requests/(RR-[A-Za-z0-9-]+)\Z")
 _ARTIFACT = re.compile(r"/reviewer/requests/(RR-[A-Za-z0-9-]+)/artifacts/(ART-[A-Za-z0-9-]+)\Z")
+_REQUESTS = '/reviewer/requests'
 MAX_EVENT_BODY = 1024 * 1024
 
 
@@ -21,8 +22,8 @@ async def _respond(send, status, body, headers=()):
 
 
 class GrokReviewerApplication:
-    def __init__(self, runtime, adapter, token):
-        self.runtime, self.adapter = runtime, adapter
+    def __init__(self, runtime, adapter, token, intake=None):
+        self.runtime, self.adapter, self.intake = runtime, adapter, intake
         self.replace_tokens(token)
 
     def replace_tokens(self, tokens):
@@ -52,13 +53,22 @@ class GrokReviewerApplication:
         artifact_match = _ARTIFACT.fullmatch(path)
         request_match = _REQUEST.fullmatch(path)
         try:
+            if method == 'GET' and path == _REQUESTS:
+                if self.intake is None:
+                    raise HubError('Reviewer intake queue is not configured')
+                await _respond(send, 200, {'requests': self.intake.list_available()})
+                return
             if method == 'GET' and request_match:
                 value = self.runtime.hub.grok_request(self.adapter.reviewer_actor_id, request_match[1])
+                if self.intake is not None:
+                    self.intake.acknowledge(request_match[1])
                 await _respond(send, 200, value)
                 return
             if method == 'GET' and artifact_match:
                 artifact, content = self.runtime.hub.grok_artifact(
                     self.adapter.reviewer_actor_id, artifact_match[1], artifact_match[2])
+                if self.intake is not None:
+                    self.intake.acknowledge(artifact_match[1])
                 await send({'type': 'http.response.start', 'status': 200, 'headers': [
                     (b'content-type', b'application/octet-stream'),
                     (b'content-length', str(len(content)).encode('ascii')),

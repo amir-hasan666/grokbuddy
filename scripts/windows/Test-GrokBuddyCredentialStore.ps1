@@ -10,8 +10,29 @@ $targets = @(
     'GrokBuddy/GITHUB_WEBHOOK_SECRET',
     'GrokBuddy/GROKBUDDY_MCP_TOKEN',
     'GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN',
-    'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY'
+    'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY',
+    'GrokBuddy/GITHUB_COMMENT_TOKEN'
 )
+$repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$config = Get-Content -LiteralPath (Join-Path $repoRoot 'config\grokbuddy.service.json') -Raw |
+    ConvertFrom-Json
+$wakeUrlEnv = if ($null -ne $config.PSObject.Properties['reviewerWakeWebhookUrlEnv']) {
+    [string]$config.reviewerWakeWebhookUrlEnv
+}
+else { '' }
+$wakeKeyEnv = if ($null -ne $config.PSObject.Properties['reviewerWakeWebhookKeyEnv']) {
+    [string]$config.reviewerWakeWebhookKeyEnv
+}
+else { '' }
+if ([bool]$wakeUrlEnv -ne [bool]$wakeKeyEnv) {
+    throw 'Reviewer wake URL and key environment names must be configured together.'
+}
+if ($wakeUrlEnv) {
+    $targets += @(
+        'GrokBuddy/REVIEWER_WAKE_WEBHOOK_URL',
+        'GrokBuddy/REVIEWER_WAKE_WEBHOOK_KEY'
+    )
+}
 
 foreach ($target in $targets) {
     $credential = $null

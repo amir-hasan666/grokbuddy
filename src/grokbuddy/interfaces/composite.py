@@ -157,12 +157,13 @@ class CompositeApplication:
     """Route exact Phase 4 paths while preserving the original webhook WSGI app."""
 
     def __init__(self, webhook_app, mcp_app, mcp_token, grok_reviewer_app=None,
-                 readiness_check=None):
+                 readiness_check=None, supervisor_readiness_check=None):
         self.webhook_app = OriginalWebhookASGIBridge(webhook_app)
         self.mcp_app = mcp_app
         self.authenticated_mcp_app = BearerTokenBoundary(mcp_app, mcp_token)
         self.grok_reviewer_app = grok_reviewer_app
         self.readiness_check = readiness_check
+        self.supervisor_readiness_check = supervisor_readiness_check
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "lifespan":
@@ -192,17 +193,28 @@ class CompositeApplication:
                     extra_headers=((b"allow", b"GET"),),
                 )
                 return
-            ready = False
+            database_ready = False
             if self.readiness_check is not None:
                 try:
-                    ready = bool(await anyio.to_thread.run_sync(self.readiness_check))
+                    database_ready = bool(await anyio.to_thread.run_sync(self.readiness_check))
                 except Exception:
-                    ready = False
+                    database_ready = False
+            supervisor_ready = True
+            if self.supervisor_readiness_check is not None:
+                try:
+                    supervisor_ready = bool(await anyio.to_thread.run_sync(
+                        self.supervisor_readiness_check))
+                except Exception:
+                    supervisor_ready = False
+            ready = database_ready and supervisor_ready
+            checks = {"database": "ok" if database_ready else "unavailable"}
+            if self.supervisor_readiness_check is not None:
+                checks["supervisor"] = "ok" if supervisor_ready else "unavailable"
             await _json_response(
                 send,
                 200 if ready else 503,
                 {
-                    "checks": {"database": "ok" if ready else "unavailable"},
+                    "checks": checks,
                     "status": "ready" if ready else "not_ready",
                 },
             )
@@ -227,6 +239,7 @@ def create_composite_application(
     public_hosts=(),
     actor_id="builder",
     grok_reviewer_app=None,
+    supervisor_readiness_check=None,
 ):
     if not isinstance(webhook_secret, str) or not webhook_secret:
         raise HubError("GITHUB_WEBHOOK_SECRET must be set and non-empty")
@@ -260,6 +273,7 @@ def create_composite_application(
         mcp_token,
         grok_reviewer_app,
         database_ready,
+        supervisor_readiness_check,
     )
     application.remote_server = remote_server
     return application

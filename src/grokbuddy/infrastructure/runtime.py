@@ -17,8 +17,11 @@ from grokbuddy.application.events import EventService
 from grokbuddy.application.github import (GitHubBindingService, GitHubEventService,
                                            GitHubProjectionService)
 from grokbuddy.application.workers import (BindingRouteWorker, Dispatcher, ProjectionWorker,
-                                            ReviewerIntakeWorker, Supervisor, TimeoutService)
-from grokbuddy.application.grok_routing import GrokRoutingService
+                                            RemoteReviewerIntakeWorker, ReviewerIntakeWorker,
+                                            ReviewerWebhookWakeWorker, Supervisor,
+                                            TimeoutService)
+from grokbuddy.application.grok_routing import (GrokRoutingService,
+                                                grok_delivery_contract_matches)
 from grokbuddy.application.common import digest, iso
 from .clock import SystemClock
 from .profiles import PROFILE_RULES
@@ -28,23 +31,39 @@ class Hub(TaskService, WorkerTaskService, ReviewService, FindingService, Governa
     """In-process trusted-host API. No MCP/HTTP/CLI integration or external authentication."""
 
     def __init__(self, *args, trigger_source_key=None, legacy_create_test_mode=False,
-                 legacy_worker_test_mode=False):
+                 legacy_worker_test_mode=False, ingress_driver_actor_ids=None):
         super().__init__(*args)
         self.trigger_source_key = trigger_source_key
         self.legacy_create_test_mode = legacy_create_test_mode
         self.legacy_worker_test_mode = legacy_worker_test_mode
+        if isinstance(ingress_driver_actor_ids, (str, bytes)):
+            raise ValueError('ingress_driver_actor_ids must be an iterable of actor IDs')
+        configured_drivers = ('builder',) if ingress_driver_actor_ids is None else tuple(
+            ingress_driver_actor_ids)
+        if (not all(isinstance(actor_id, str) and actor_id.strip() == actor_id and actor_id
+                    for actor_id in configured_drivers)
+                or len(set(configured_drivers)) != len(configured_drivers)):
+            raise ValueError('ingress_driver_actor_ids must contain unique non-empty actor IDs')
+        self.ingress_owner_actor_id = 'workbuddy-ingress'
+        self.ingress_driver_actor_ids = frozenset(configured_drivers)
 
 
 class LocalRuntime:
     def __init__(self, directory, contracts_directory, *, clock=None, settings=None, jitter=None,
                  trigger_source_key=None, legacy_create_test_mode=False,
-                 legacy_worker_test_mode=False):
+                 legacy_worker_test_mode=False, ingress_driver_actor_ids=None,
+                 default_reviewer_actor_id='mock-reviewer'):
         self.directory = Path(directory)
         self.settings = settings or Settings()
         self.clock = clock or SystemClock()
         self.db = SQLiteDatabase(self.directory / 'hub.db')
         self.store = FileArtifactStore(self.directory / 'artifacts', self.settings.max_artifact_bytes)
         self.contracts = JsonContracts(contracts_directory)
+        if (not isinstance(default_reviewer_actor_id, str)
+                or not default_reviewer_actor_id.strip()
+                or default_reviewer_actor_id.strip() != default_reviewer_actor_id):
+            raise ValueError('default_reviewer_actor_id must be a non-empty actor ID')
+        self.default_reviewer_actor_id = default_reviewer_actor_id
         self._seed()
         args = (self.db, self.store, self.contracts, self.clock, self.settings)
         if trigger_source_key is None:
@@ -52,7 +71,8 @@ class LocalRuntime:
             trigger_source_key = configured_key.encode('utf-8') if configured_key else None
         self.hub = Hub(*args, trigger_source_key=trigger_source_key,
                        legacy_create_test_mode=legacy_create_test_mode,
-                       legacy_worker_test_mode=legacy_worker_test_mode)
+                       legacy_worker_test_mode=legacy_worker_test_mode,
+                       ingress_driver_actor_ids=ingress_driver_actor_ids)
         self.events = EventService(*args)
         self.timeouts = TimeoutService(*args)
         self.queue = SQLiteMockQueue(*args)
@@ -106,22 +126,38 @@ class LocalRuntime:
                 'mock': self.mock.run_one(), 'event': self.events.handle_one()}
 
     def supervisor(self, *, projection_transport=None, binding_policy=None,
-                   intake_source='local-mock-supervisor'):
+                   intake_source='local-mock-supervisor', dispatcher=None, intake=None,
+                   reviewer_wake=None):
         """Build the Phase 6.6 scheduler without starting a service or external I/O."""
         args = (self.db, self.store, self.contracts, self.clock, self.settings)
-        intake = ReviewerIntakeWorker(
-            *args, reviewer_actor_id='mock-reviewer',
-            consumer=lambda rr: self.mock.run_one(rr['id']),
-            reconciler=lambda rr: self.queue.completed(rr['id']),
-            source=intake_source)
+        if dispatcher is None:
+            dispatcher = self.dispatcher
+        if intake is None and dispatcher is self.dispatcher:
+            intake = ReviewerIntakeWorker(
+                *args, reviewer_actor_id='mock-reviewer',
+                consumer=lambda rr: self.mock.run_one(rr['id']),
+                reconciler=lambda rr: self.queue.completed(rr['id']),
+                source=intake_source)
         binding_routes = BindingRouteWorker(self, binding_policy) if binding_policy else None
         projections = (ProjectionWorker(self.github_projections, projection_transport)
                        if projection_transport is not None else None)
         return Supervisor(binding_routes=binding_routes, recovery=self.timeouts,
-                          dispatcher=self.dispatcher, intake=intake, events=self.events,
-                          projections=projections)
+                          dispatcher=dispatcher, intake=intake, events=self.events,
+                          reviewer_wake=reviewer_wake, projections=projections)
 
-    def grok_dispatcher(self, transport, reviewer_actor_id, public_base_url):
+    def grok_intake(self, reviewer_actor_id):
+        """Build the production HTTP intake receipt worker for one registered Reviewer."""
+        args = (self.db, self.store, self.contracts, self.clock, self.settings)
+        return RemoteReviewerIntakeWorker(*args, reviewer_actor_id=reviewer_actor_id)
+
+    def grok_reviewer_wake(self, reviewer_actor_id, transport, *, max_attempts=3):
+        """Build the optional best-effort wake worker for the HTTP intake queue."""
+        args = (self.db, self.store, self.contracts, self.clock, self.settings)
+        return ReviewerWebhookWakeWorker(
+            *args, reviewer_actor_id=reviewer_actor_id, transport=transport,
+            max_attempts=max_attempts)
+
+    def grok_dispatcher(self, transport, reviewer_actor_id, public_base_url, *, intake=None):
         """Build a separately routed worker; the local Mock worker stays unchanged."""
         with self.db.transaction() as repo:
             actor = repo.get('actors', reviewer_actor_id)
@@ -130,6 +166,12 @@ class LocalRuntime:
         adapter = GrokBotReviewerAdapter(
             self.db, transport, self.clock, reviewer_actor_id=reviewer_actor_id,
             agent_id=actor['agent_id'], server_id=actor['server_id'],
-            public_base_url=public_base_url)
+            public_base_url=public_base_url, http_intake=intake)
         args = (self.db, self.store, self.contracts, self.clock, self.settings)
-        return Dispatcher(*args, adapter=adapter, reviewer_actor_ids={reviewer_actor_id})
+
+        def has_frozen_route(repo, rr, task):
+            return grok_delivery_contract_matches(
+                repo, rr, task, reviewer_actor_id)
+
+        return Dispatcher(*args, adapter=adapter, reviewer_actor_ids={reviewer_actor_id},
+                          eligibility=has_frozen_route)

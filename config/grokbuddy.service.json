@@ -1,8 +1,15 @@
 {
   "contractsDir": "docs/contracts",
+  "githubCommentTokenEnv": "GITHUB_COMMENT_TOKEN",
   "host": "127.0.0.1",
   "port": 8788,
   "publicBase": "https://grokbuddy.amirhasan.top",
   "reviewerActor": "grok-reviewer-b",
-  "runtimeDir": "var/github-manual"
+  "reviewerRegistryPath": "config/reviewer-registry.json",
+  "reviewerWakeMaxAttempts": 3,
+  "reviewerWakeWebhookKeyEnv": "GROKBUDDY_REVIEWER_WAKE_WEBHOOK_KEY",
+  "reviewerWakeWebhookUrlEnv": "GROKBUDDY_REVIEWER_WAKE_WEBHOOK_URL",
+  "runtimeDir": "var/github-manual",
+  "supervisorEnabled": true,
+  "supervisorIntervalSeconds": 5
 }

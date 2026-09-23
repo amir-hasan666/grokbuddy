@@ -274,6 +274,10 @@ async def test_mcp_legacy_client_lists_exact_tools_and_keeps_plan_request_pendin
         submitted_call = await client.call_tool("submit_plan", {
             "task_id": task["id"],
             "plan_artifact_id": plan["id"],
+            "approved_scope": {
+                "summary": "MCP Phase 2 plan scope",
+                "files": ["local.txt"],
+            },
             "expected_version": task["version"],
             "idempotency_key": key(),
         })

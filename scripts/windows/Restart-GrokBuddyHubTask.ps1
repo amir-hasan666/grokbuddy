@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$TaskName = 'GrokBuddy Hub',
-    [string]$EvidencePath
+    [string]$EvidencePath,
+    [ValidateRange(1, 300)]
+    [int]$ReadyTimeoutSeconds = 30
 )
 
 Set-StrictMode -Version Latest
@@ -37,27 +39,35 @@ try {
     }
 
     Start-ScheduledTask -TaskName $TaskName
-    $deadline = (Get-Date).AddSeconds(15)
+    $deadline = (Get-Date).AddSeconds($ReadyTimeoutSeconds)
     $ready = $false
+    $supervisorCheck = $null
     do {
         Start-Sleep -Milliseconds 500
         try {
             $response = Invoke-RestMethod -Uri 'http://127.0.0.1:8788/ready' -TimeoutSec 2
-            $ready = $response.status -eq 'ready'
+            $supervisorCheck = if (
+                $null -ne $response.checks -and
+                $null -ne $response.checks.PSObject.Properties['supervisor']
+            ) { [string]$response.checks.supervisor } else { $null }
+            $ready = $response.status -eq 'ready' -and $supervisorCheck -eq 'ok'
         }
         catch {
             $ready = $false
+            $supervisorCheck = $null
         }
     } until ($ready -or (Get-Date) -ge $deadline)
 
     if (-not $ready) {
-        throw 'GrokBuddy Hub did not become ready within 15 seconds.'
+        throw "GrokBuddy Hub did not become ready with supervisor=ok within $ReadyTimeoutSeconds seconds."
     }
 
     $result = [pscustomobject]@{
         TaskName = $TaskName
         StoppedProcessIds = $stopped
         Ready = $ready
+        Supervisor = $supervisorCheck
+        ReadyTimeoutSeconds = $ReadyTimeoutSeconds
         Port = 8788
     }
     Write-RestartEvidence $result
@@ -67,6 +77,7 @@ catch {
     Write-RestartEvidence ([pscustomobject]@{
         TaskName = $TaskName
         Ready = $false
+        ReadyTimeoutSeconds = $ReadyTimeoutSeconds
         Error = $_.Exception.Message
     })
     throw

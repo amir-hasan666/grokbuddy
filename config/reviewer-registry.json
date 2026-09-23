@@ -1,0 +1,16 @@
+{
+  "activeReviewer": "grok-reviewer-b",
+  "reviewers": {
+    "grok-reviewer-b": {
+      "connector": {
+        "agentId": "4335c388-584c-434e-b14e-13964b176b6e",
+        "serverId": "3504754",
+        "type": "grok_bot"
+      },
+      "credentialRef": "GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN",
+      "displayName": "workbuddy审核员",
+      "enabled": true
+    }
+  },
+  "version": 1
+}

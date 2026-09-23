@@ -81,8 +81,10 @@ $ok = $service -and $service.Status -eq 'Running' -and $service.StartType -eq 'A
     $task -and [string]$task.State -eq 'Running' -and $listener.Count -gt 0 -and
     $result.Local.Health.Code -eq '200' -and $result.Local.Health.Body -eq '{"status": "ok"}' -and
     $result.Local.Ready.Code -eq '200' -and $result.Local.Ready.Body -match '"status": "ready"' -and
+    $result.Local.Ready.Body -match '"supervisor"\s*:\s*"ok"' -and
     $result.Local.Root.Code -eq '404' -and $result.Local.Root.Body -eq '{"error": "not_found"}' -and
     $result.Public.Health.Code -eq '200' -and $result.Public.Ready.Code -eq '200' -and
+    $result.Public.Ready.Body -match '"supervisor"\s*:\s*"ok"' -and
     $result.Public.Root.Code -eq '404' -and $result.Public.Root.Body -eq '{"error": "not_found"}'
 if (-not $ok) {
     exit 1

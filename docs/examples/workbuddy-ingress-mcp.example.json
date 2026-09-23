@@ -10,7 +10,7 @@
         "-File",
         "D:\\Codex\\grokbuddy\\scripts\\windows\\Start-GrokBuddyIngressMcp.ps1",
         "-RuntimeDir",
-        "D:\\Codex\\grokbuddy\\var\\workbuddy-mcp",
+        "D:\\Codex\\grokbuddy\\var\\github-manual",
         "-ContractsDir",
         "D:\\Codex\\grokbuddy\\docs\\contracts"
       ],

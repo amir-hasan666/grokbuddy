@@ -1,5 +1,6 @@
 from grokbuddy.domain.model import HubError, PermissionDenied, Role, ReviewType
 from .common import Services, uid, canonical, audit, iso, digest
+from .grok_routing import select_review_delivery_channel
 
 
 class ReviewService(Services):
@@ -26,6 +27,8 @@ class ReviewService(Services):
             expected_state = 'PLANNING' if plan else 'SELF_TESTING'
             if task['state'] != expected_state or task['active_rr_id']:
                 raise HubError('Task cannot request this review')
+            delivery_channel = select_review_delivery_channel(
+                repo, task, reviewer, protocol_version)
             artifact_id = task['current_plan_id'] if plan else task['current_final_id']
             if not artifact_id:
                 raise HubError('Frozen review input is required')
@@ -69,6 +72,7 @@ class ReviewService(Services):
                            created_at=self.clock.now(), deadline_at=deadline, envelope=envelope,
                            context_artifact_id=context['id'], round_limit=limit,
                            protocol_version=protocol_version,
+                           delivery_channel=delivery_channel,
                            expected_task_version=envelope.get('expected_task_version'))
             repo.add('review_requests', request)
             repo.add('review_rounds', dict(id=request_id, task_id=task_id, review_type=kind.value,
@@ -80,8 +84,10 @@ class ReviewService(Services):
                      lease_token=None, lease_generation=0, delivery_key=request_id,
                      request_hash=digest(envelope), input_hash=artifact['sha256'],
                      profile_hash=profile['sha256'], frozen_task_version=task['version'],
+                     delivery_channel=delivery_channel,
                      created_at=self.clock.now()))
             audit(repo, self.clock, actor, 'REVIEW_REQUEST_CREATED', task_id, request_id=request_id,
-                  review_round=round_number, input_sha256=artifact['sha256'])
+                  review_round=round_number, input_sha256=artifact['sha256'],
+                  delivery_channel=delivery_channel)
             box['response'] = {'review_request_id': request_id, 'status': 'PENDING'}
             return box['response']

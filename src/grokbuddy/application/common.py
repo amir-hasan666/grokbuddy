@@ -45,9 +45,37 @@ class Services:
             raise PermissionDenied('Principal not authorized')
         return actor
 
+    def _can_drive_ingress_task(self, task, actor):
+        """Allow only the configured ordinary Builder to drive a signed v2 ingress Task.
+
+        ``owner_id`` remains the immutable creator/ingress identity.  Driving is
+        deliberately derived from the frozen trigger anchors instead of a sticky
+        conversation flag or an owner transfer.
+        """
+        evidence = task.get('trigger_evidence')
+        return (
+            actor.get('role') == Role.BUILDER
+            and actor['id'] in getattr(self, 'ingress_driver_actor_ids', frozenset())
+            and not actor.get('worker_type')
+            and not actor.get('trigger_source')
+            and task.get('owner_id') == getattr(self, 'ingress_owner_actor_id', None)
+            and task.get('grokbuddy_enabled') is True
+            and task.get('review_protocol_version') == 'v2'
+            and isinstance(task.get('conversation_id'), str)
+            and bool(task['conversation_id'])
+            and isinstance(evidence, dict)
+            and evidence.get('principal_id') == task['owner_id']
+            and evidence.get('conversation_id') == task['conversation_id']
+            and evidence.get('message_id') == task.get('trigger_message_id')
+            and isinstance(evidence.get('source_artifact_id'), str)
+            and isinstance(evidence.get('source_artifact_sha256'), str)
+            and len(evidence['source_artifact_sha256']) == 64
+        )
+
     def task_for(self, repo, task_id, actor, expected_version=NO_VERSION, live=True):
         task = repo.get('tasks', task_id)
-        if actor['role'] == Role.BUILDER and task['owner_id'] != actor['id']:
+        if (actor['role'] == Role.BUILDER and task['owner_id'] != actor['id']
+                and not self._can_drive_ingress_task(task, actor)):
             raise PermissionDenied('Task belongs to another Builder')
         if expected_version is not NO_VERSION:
             if type(expected_version) is not int or expected_version < 0:

@@ -7,11 +7,12 @@ business state or review lifecycle logic.
 
 import argparse
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from grokbuddy.domain.model import HubError
 from grokbuddy.infrastructure.runtime import LocalRuntime
@@ -24,6 +25,32 @@ IDEMPOTENT_WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, id
                                    openWorldHint=False)
 HUMAN_CANCEL = ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=True,
                                openWorldHint=False)
+
+
+ScopeItem = Annotated[str, Field(min_length=1)]
+
+
+class ApprovedPlanScope(BaseModel):
+    """Structured v2 Plan scope exposed in the WorkBuddy tool schema."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"minProperties": 1},
+    )
+
+    # A None default makes each known field optional without allowing an
+    # explicit JSON null.  The validator below still rejects an empty object.
+    summary: str = Field(default=None, min_length=1)
+    files: list[ScopeItem] = Field(
+        default=None, min_length=1, json_schema_extra={"uniqueItems": True})
+    components: list[ScopeItem] = Field(
+        default=None, min_length=1, json_schema_extra={"uniqueItems": True})
+
+    @model_validator(mode="after")
+    def require_content(self):
+        if self.summary is None and self.files is None and self.components is None:
+            raise ValueError("Plan scope must be a non-empty structured object")
+        return self
 
 
 def _default_contracts():
@@ -88,13 +115,15 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
     def submit_plan(
         task_id: str,
         plan_artifact_id: str,
+        approved_scope: ApprovedPlanScope,
         expected_version: int,
         idempotency_key: str,
     ) -> dict[str, Any]:
-        """Attach a previously submitted plan artifact to a task."""
+        """Attach a Plan artifact with its non-empty structured approved scope."""
         return _call(gateway, "submit_plan", {
             "task_id": task_id,
             "plan_artifact_id": plan_artifact_id,
+            "approved_scope": approved_scope.model_dump(exclude_none=True),
             "expected_version": expected_version,
             "idempotency_key": idempotency_key,
         })
@@ -256,21 +285,41 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
             "idempotency_key": idempotency_key,
         })
 
+    # mcp==2.2.0 otherwise ignores unknown top-level arguments before the
+    # function runs.  Keep submit_plan aligned with ClientGateway._strict and
+    # publish the same additionalProperties:false contract to MCP clients.
+    submit_plan_tool = server._tool_manager.get_tool("submit_plan")
+    if submit_plan_tool is None:  # pragma: no cover - registration invariant
+        raise RuntimeError("submit_plan MCP tool was not registered")
+    argument_model = submit_plan_tool.fn_metadata.arg_model
+    argument_model.model_config["extra"] = "forbid"
+    argument_model.model_rebuild(force=True)
+    submit_plan_tool.parameters = argument_model.model_json_schema(by_alias=True)
+
     return server
 
 
-def _parser():
+def _parser(default_reviewer_actor_id='mock-reviewer'):
     parser = argparse.ArgumentParser(description="GrokBuddy Hub MCP server (stdio)")
     parser.add_argument("--runtime-dir", required=True, help="Local Hub data directory")
     parser.add_argument("--contracts-dir", default=str(_default_contracts()))
     parser.add_argument("--actor", default="builder", help="Fixed local Builder simulation principal")
     parser.add_argument("--human-actor", default="human", help="Fixed local Human principal for close_task")
+    parser.add_argument(
+        "--default-reviewer-actor",
+        default=default_reviewer_actor_id,
+        help="Reviewer used when a request omits reviewer_id",
+    )
     return parser
 
 
-def main(argv=None):
-    args = _parser().parse_args(argv)
-    runtime = LocalRuntime(args.runtime_dir, args.contracts_dir)
+def main(argv=None, *, default_reviewer_actor_id='mock-reviewer'):
+    args = _parser(default_reviewer_actor_id).parse_args(argv)
+    runtime = LocalRuntime(
+        args.runtime_dir,
+        args.contracts_dir,
+        default_reviewer_actor_id=args.default_reviewer_actor,
+    )
     server = create_mcp_server(runtime, args.actor, args.human_actor)
     server.run(transport="stdio")
 

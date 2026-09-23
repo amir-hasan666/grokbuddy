@@ -4,15 +4,92 @@ from copy import deepcopy
 import json
 import re
 
-from grokbuddy.domain.model import ACTIVE_REQUEST, Conflict, HubError, PermissionDenied, Role
+from grokbuddy.domain.model import (ACTIVE_REQUEST, Conflict, HubError, PermissionDenied,
+                                   ReviewDeliveryUnavailable, Role)
 from .common import Services, audit, uid
 
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 _SERVER = re.compile(r"[0-9]{1,20}\Z")
 
+REVIEWER_HTTP = 'REVIEWER_HTTP'
+GITHUB_COMMENT = 'GITHUB_COMMENT'
+LOCAL_ADAPTER = 'LOCAL_ADAPTER'
+
+
+def select_review_delivery_channel(repo, task, reviewer, protocol_version):
+    """Freeze one auditable delivery contract before a ReviewRequest exists."""
+    if reviewer.get('reviewer_type') != 'grok_bot':
+        return LOCAL_ADAPTER
+    bindings = repo.find('github_bindings', task_id=task['id'])
+    routes = repo.find('grok_reviewer_routes', task_id=task['id'])
+    if not bindings and not routes:
+        if protocol_version == 'v2' and task.get('review_protocol_version') == 'v2':
+            return REVIEWER_HTTP
+        raise ReviewDeliveryUnavailable(
+            'Unbound Grok review delivery requires a formal v2 Task')
+    if (len(bindings) == 1 and len(routes) == 1
+            and routes[0]['reviewer_actor_id'] == reviewer['id']
+            and routes[0].get('binding_id') == bindings[0]['id']):
+        return GITHUB_COMMENT
+    raise ReviewDeliveryUnavailable(
+        'Grok review requires either no binding/route or one matching binding and route')
+
+
+def grok_delivery_contract_matches(repo, rr, task, reviewer_actor_id):
+    """Re-check the frozen channel without deriving authority from an external carrier."""
+    if rr['envelope']['expected_reviewer_actor_id'] != reviewer_actor_id:
+        return False
+    bindings = repo.find('github_bindings', task_id=task['id'])
+    routes = repo.find('grok_reviewer_routes', task_id=task['id'])
+    channel = rr.get('delivery_channel')
+    if channel == REVIEWER_HTTP:
+        # Binding/route created later apply only to future requests.  They must
+        # not rewrite or invalidate this RR's already frozen HTTP channel.
+        return rr.get('protocol_version') == 'v2'
+    if channel in (None, GITHUB_COMMENT):  # None preserves historical routed requests.
+        return (len(bindings) == 1 and len(routes) == 1
+                and routes[0]['reviewer_actor_id'] == reviewer_actor_id
+                and routes[0].get('binding_id') == bindings[0]['id'])
+    return False
+
 
 class GrokRoutingService(Services):
+    def ensure_registry_reviewer(self, actor_id, reviewer_actor_id, name, agent_id, server_id):
+        """Register a configured Reviewer or verify its immutable technical identity.
+
+        Registry display names are operational labels.  An existing Actor row is
+        not rewritten when that label changes; provider and execution identity
+        remain immutable.
+        """
+        if (not isinstance(reviewer_actor_id, str) or not reviewer_actor_id
+                or not isinstance(name, str) or not name
+                or not isinstance(agent_id, str) or not _UUID.fullmatch(agent_id)
+                or not isinstance(server_id, str) or not _SERVER.fullmatch(server_id)):
+            raise HubError('Grok Reviewer identity configuration is invalid')
+        provider_id = f'grok-bot:{server_id}:{agent_id}'
+        with self.db.transaction() as repo:
+            system = self.actor(repo, actor_id, Role.SYSTEM)
+            old = repo.find('actors', id=reviewer_actor_id)
+            if old:
+                stable = old[0]
+                if (stable.get('role') != Role.REVIEWER.value
+                        or stable.get('provider_id') != provider_id
+                        or stable.get('reviewer_type') != 'grok_bot'
+                        or stable.get('agent_id') != agent_id
+                        or stable.get('server_id') != server_id
+                        or stable.get('enabled') is not True):
+                    raise Conflict('Grok Reviewer technical identity is immutable')
+                return stable
+            record = dict(id=reviewer_actor_id, name=name, role=Role.REVIEWER.value,
+                          provider_id=provider_id, reviewer_type='grok_bot',
+                          agent_id=agent_id, server_id=server_id, enabled=True)
+            repo.add('actors', record)
+            audit(repo, self.clock, system, 'GROK_REVIEWER_REGISTERED',
+                  reviewer_actor_id=reviewer_actor_id, provider_id=provider_id,
+                  registration_source='REVIEWER_REGISTRY')
+            return record
+
     def retry_final_with_grok(self, human_actor_id, builder_actor_id, task_id, old_request_id,
                               new_limit, new_deadline, reason, expected_version, key):
         """Resume a terminal Mock request via existing Application commands.
@@ -55,11 +132,10 @@ class GrokRoutingService(Services):
         with self.db.transaction() as repo:
             actor = self.actor(repo, reviewer_actor_id, Role.REVIEWER)
             rr = repo.get('review_requests', request_id)
-            routes = repo.find('grok_reviewer_routes', task_id=rr['task_id'])
             if (actor['reviewer_type'] != 'grok_bot'
                     or rr['task_id'] != task_id or rr['review_id'] != review_id
-                    or rr['envelope']['expected_reviewer_actor_id'] != reviewer_actor_id
-                    or not routes or routes[0]['reviewer_actor_id'] != reviewer_actor_id):
+                    or not grok_delivery_contract_matches(
+                        repo, rr, repo.get('tasks', rr['task_id']), reviewer_actor_id)):
                 raise PermissionDenied('Grok event does not match a registered route')
 
     def grok_request(self, reviewer_actor_id, request_id):
@@ -74,9 +150,8 @@ class GrokRoutingService(Services):
                     or task['state'] in ('PLAN_HUMAN_REVIEW', 'FINAL_HUMAN_REVIEW')
                     or self.clock.now() >= rr['deadline_at'] or self.clock.now() >= task['deadline_at']):
                 raise PermissionDenied('Review request is not current for this Reviewer')
-            route = repo.find('grok_reviewer_routes', task_id=task['id'])
-            if not route or route[0]['reviewer_actor_id'] != reviewer_actor_id:
-                raise PermissionDenied('Review request has no authenticated Grok route')
+            if not grok_delivery_contract_matches(repo, rr, task, reviewer_actor_id):
+                raise PermissionDenied('Review request has no authenticated Grok delivery route')
             envelope = dict(rr['envelope'])
             if envelope.get('protocol_version') == 'v2':
                 # The immutable request records the version at dispatch.  A

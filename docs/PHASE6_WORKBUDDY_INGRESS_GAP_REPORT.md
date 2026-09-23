@@ -1,4 +1,4 @@
-PHASE6-WORKBUDDY-INGRESS-WIRING: LOCAL PASS / WAITING HUMAN RETEST
+PHASE6-WORKBUDDY-INGRESS-WIRING: PASS
 
 # Phase 6 — WorkBuddy Ingress Wiring Gap Report
 
@@ -11,7 +11,7 @@ PHASE6-WORKBUDDY-INGRESS-WIRING: LOCAL PASS / WAITING HUMAN RETEST
 
 最小修复是在仓内新增第三个独立 stdio MCP：`grokbuddy-ingress`。它只暴露 `create_triggered_task`，进程固定绑定 `workbuddy-ingress`，在受控进程内签发 evidence，再经原 `ClientGateway → TaskService.create_task` 进入 Hub 二次校验。普通 Hub 的 `create_task`、Worker、远程 `/mcp` 均未获得新权限。
 
-本地代码、MCP handshake、正反例和 stdio 子进程已经验证；WorkBuddy 用户配置、首次信任、真实消息 provenance 和 6.17-B/C 尚未由 Human 重跑，所以结论只能保持 `WAITING HUMAN RETEST`。
+本地代码、MCP handshake、正反例和 stdio 子进程已经验证；Human 随后完成 WorkBuddy 用户配置、worker/ingress 信任、Trigger Key Credential、trigger skill 和 ingress `tools/list` 前置，并在 live Hub DB `var/workbuddy-mcp/hub.db` 完成 B4/C 真机重测。B4 通过 `create_triggered_task` 恰好创建一个活动 Task，C 在该 Task `CANCELLED` 后保持所有 Hub 表零 mutation；6.17 现为 `PASS`。详见 [6.17 Trigger Isolation 报告](PHASE6_STEP6_17_TRIGGER_ISOLATION_REPORT.md)。
 
 ## 2. Preflight 差距表
 
@@ -23,7 +23,7 @@ PHASE6-WORKBUDDY-INGRESS-WIRING: LOCAL PASS / WAITING HUMAN RETEST
 | Gateway / local HTTP fallback | 由进程启动参数固定 actor；local HTTP 无生产认证 | 可把 `trigger_evidence` 透传到 Application | 没有正式 WorkBuddy ingress 认证/签发接线 | 不对公网开放，不用于 6.17 真机。 |
 | Remote MCP `/mcp` | Bearer `GROKBUDDY_MCP_TOKEN`，内部仍是 read-only Builder query | 5 个只读查询 | 没有 create，且不应扩大 | 保持只读。PublicBase 仍为 `https://grokbuddy.amirhasan.top`。 |
 | WorkBuddy 5.5.6 connector | 用户配置现有 Hub + Worker；支持 stdio/sse/http、`command/args/env` | 可启动本地 MCP 并执行工具；首次连接有信任门 | 没有 `grokbuddy-ingress`，没有 Key，模型只能发现普通 `create_task` | 新增无 Secret 配置样例、Credential wrapper、单工具 server。 |
-| WorkBuddy current-message metadata | 自定义 MCP schema 未声明 native user-message ID/provenance 注入；官方 Skills 支持运行时 `${CODEBUDDY_SESSION_ID}` | skill 可传当前 session ID 和当前消息文本/分段 | 无可信签发者；普通模型构造 evidence 不可信 | Skill 传 runtime session ID；未展开占位符 fail closed；message/turn ID 由 session + idempotency key 派生，evidence 在受控进程签发。真实 provenance 仍需 Human B 真机确认。 |
+| WorkBuddy current-message metadata | 自定义 MCP schema 未声明 native user-message ID/provenance 注入；官方 Skills 支持运行时 `${CODEBUDDY_SESSION_ID}` | skill 可传当前 session ID 和当前消息文本/分段 | 无可信签发者；普通模型构造 evidence 不可信 | Skill 传 runtime session ID；未展开占位符 fail closed；message/turn ID 由 session + idempotency key 派生，evidence 在受控进程签发。Human B4/C 已验证 6.17 当前真机路径；不外推为 native immutable message ID 能力。 |
 
 WorkBuddy transport/config 能力依据：本机 `WorkBuddy.exe` FileVersion 5.5.6、当前脱敏 `mcp.json` shape、腾讯 [WorkBuddy Enterprise MCP 使用文档](https://cloud.tencent.com/document/product/1831/137039)及 [Skills 变量占位符文档](https://cloud.tencent.com/document/product/1831/137020)。本报告没有读取或记录任何 Secret 值。
 
@@ -64,7 +64,7 @@ WorkBuddy transport/config 能力依据：本机 `WorkBuddy.exe` FileVersion 5.5
 - 真 stdio 子进程 handshake/list/call/落库；
 - 既有 6.1 触发、伪造、错误 principal、offset、时效和 conversation 唯一性回归继续通过。
 
-这些都是本地/隔离证据。WorkBuddy 5.5.6 是否在目标 conversation 中实际展开 session placeholder、是否按 skill 传递真实分段、是否成功读取本机 Credential，仍是 `ENVIRONMENT_VALIDATION_REQUIRED`。
+这些是实现阶段的本地/隔离证据。后续 Human B4/C 已证明目标 conversation 的当前 skill/session/Credential/ingress 路径满足 6.17；自定义 MCP 的 native immutable user-message ID 自动注入仍未被证明，不作为本次 PASS 声明。
 
 实际命令与结果：
 
@@ -74,15 +74,17 @@ WorkBuddy transport/config 能力依据：本机 `WorkBuddy.exe` FileVersion 5.5
 - `python -m compileall -q src/grokbuddy scripts/grokbuddy_ingress_mcp.py`、三个 PowerShell 文件的 parser check、MCP example JSON parse、`git diff --check` → PASS。
 - `.venv-phase0/Scripts/python.exe scripts/validate_phase0.py --allow-core` → `219/219 passed`；其 `External environment gate: BLOCKED` 是 checker 明示未运行 live integrations，不是本地合同失败。
 
-未运行：真实 WorkBuddy tools/list/call、Credential Target 读取、Hub 重启、固定 PublicBase 当次探测、6.17-B/C、Grok/Reviewer/GitHub、6.20。
+本报告初版时未运行：真实 WorkBuddy tools/list/call、Credential Target 读取、Hub 重启、固定 PublicBase 当次探测、6.17-B/C、Grok/Reviewer/GitHub、6.20。后续仅补齐了 6.17 所需的 Human 配置、ingress tools/list/call 与 B4/C；固定 PublicBase、Grok/Reviewer/GitHub、6.19/6.20 仍未由本报告验证。
 
-## 6. Human 重测前动作
+## 6. Human 真机完成项与复现清单
+
+以下 1–6 已作为 6.17 B4/C 前置和真机路径完成；保留为复现清单，不记录任何 Secret 值：
 
 1. WorkBuddy MCP 管理中对 `grokbuddy-worker` 点“信任”（若尚未）。
 2. 在 Credential Manager 配置同一份 Trigger Source Key；运行 credential check；按既有运维 runbook 让 Hub 受控读取新 Target。
 3. 合并 `grokbuddy-ingress` 配置、安装 trigger skill，刷新/重启 WorkBuddy，并完成新 server 的首次信任。
 4. tools/list 确认 ingress 只有一个点火工具；不要调用普通 Hub `create_task`。
-5. 在同一 WorkBuddy conversation 中按 6.17 报告重跑 `B-before → 发送精确触发消息 → B-after → compare B`。
+5. 在同一 WorkBuddy conversation 中按 6.17 报告使用 live DB 重跑 `B4-before → 发送精确触发消息 → B4-after → compare B`。
 6. B Task 进入正式终态后，再跑 C；保留所有原始非 Secret 摘要。
 
-到 Human B→C 重测完成前，不得把本报告或 6.17 改成 PASS。
+Human B4→C 已在 live Hub DB `var/workbuddy-mcp/hub.db` 完成并通过；6.17 与本 ingress wiring 报告均为 PASS。`6.17 PASS ≠ 6.19 ≠ 6.20`，到此 STOP。

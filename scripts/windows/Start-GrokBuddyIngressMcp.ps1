@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)]
     [string]$RuntimeDir,
 
     [Parameter(Mandatory)]
@@ -11,6 +10,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+if ([string]::IsNullOrWhiteSpace($RuntimeDir)) {
+    $serviceConfigPath = Join-Path $repoRoot 'config\grokbuddy.service.json'
+    $serviceConfig = Get-Content -LiteralPath $serviceConfigPath -Raw | ConvertFrom-Json
+    $configuredRuntimeDir = [string]$serviceConfig.runtimeDir
+    if ([string]::IsNullOrWhiteSpace($configuredRuntimeDir)) {
+        throw 'config/grokbuddy.service.json must define runtimeDir.'
+    }
+    $RuntimeDir = [IO.Path]::GetFullPath((Join-Path $repoRoot $configuredRuntimeDir))
+}
+
 $python = Join-Path $repoRoot '.venv-phase0\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $python)) {
     $python = Join-Path $repoRoot '.venv\Scripts\python.exe'
