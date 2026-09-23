@@ -21,10 +21,11 @@ _MAX_RESPONSE_BYTES = 4096
 class ReviewerWakeTransportError(Exception):
     """Secret-free transport failure classification for the wake worker."""
 
-    def __init__(self, code, *, retryable):
+    def __init__(self, code, *, retryable, http_status_code=None):
         super().__init__(code)
         self.code = code
         self.retryable = retryable
+        self.http_status_code = http_status_code
 
 
 class _NoRedirectHandler(HTTPRedirectHandler):
@@ -62,9 +63,12 @@ class ReviewerWakeHttpTransport:
     @staticmethod
     def _http_failure(status):
         retryable = status in (408, 429) or status >= 500
-        code = "WAKE_HTTP_RETRYABLE" if retryable else "WAKE_HTTP_REJECTED"
-        return ReviewerWakeTransportError(code, retryable=retryable)
-
+        code = ("WAKE_CONSUMER_UNAVAILABLE" if status == 503 else
+                "WAKE_HTTP_RETRYABLE" if retryable else
+                "WAKE_HTTP_REJECTED" if status in (400, 401, 403, 405, 410, 422) else
+                "WAKE_HTTP_UNCLASSIFIED")
+        return ReviewerWakeTransportError(
+            code, retryable=retryable, http_status_code=status)
 
     def send(self, request_id, deduplication_key):
         self._validate_identifier(request_id, "request ID")

@@ -467,6 +467,7 @@ class ReviewerWebhookWakeWorker(Services):
     })
     _BASE_RETRY_SECONDS = 5
     _MAX_RETRY_SECONDS = 60
+    _MAX_TOTAL_ATTEMPTS = 64
 
     def __init__(self, *args, reviewer_actor_id, transport,
                  intake_source='grok-reviewer-http',
@@ -602,15 +603,26 @@ class ReviewerWebhookWakeWorker(Services):
                           wake_receipt_id=receipt['id'])
                 if receipt.get('terminal_reason'):
                     continue
-                if receipt['attempts'] >= self.max_attempts:
+                if receipt['attempts'] >= self._MAX_TOTAL_ATTEMPTS:
                     self._stop(repo, receipt, task, system, 'WAKE_ATTEMPTS_EXHAUSTED')
                     continue
                 status = receipt['status']
-                if status in ('ACKED', 'FAILED'):
+                if status == 'FAILED' and receipt.get('last_error_code') not in self._TRANSIENT_CODES:
+                    legacy_reason = (
+                        'LEGACY_HTTP_REJECTION_UNCLASSIFIED'
+                        if receipt.get('last_error_code') == 'WAKE_HTTP_REJECTED'
+                        and receipt.get('last_http_status_code') is None else
+                        'UNCLASSIFIED_HTTP_RESPONSE'
+                        if receipt.get('last_error_code') == 'WAKE_HTTP_UNCLASSIFIED' else
+                        'PERMANENT_WAKE_REJECTION'
+                        if receipt.get('last_error_code') == 'WAKE_HTTP_REJECTED' else
+                        'UNCLASSIFIED_WAKE_FAILURE'
+                    )
+                    self._stop(repo, receipt, task, system, legacy_reason)
                     continue
                 if status == 'LEASED' and receipt['lease_until'] > self.clock.now():
                     continue
-                if status not in ('READY', 'LEASED', 'UNKNOWN'):
+                if status not in ('READY', 'LEASED', 'UNKNOWN', 'ACKED', 'FAILED'):
                     continue
                 if status != 'READY' and self._retry_due_at(receipt, rr, task) > self.clock.now():
                     continue
@@ -676,9 +688,11 @@ class ReviewerWebhookWakeWorker(Services):
                       trigger_reason='REVIEWER_EVENT_PENDING', result='DEFERRED',
                       next_retry_at=next_retry, terminal_reason=None)
                 return 'DEFERRED'
-        outcome, code = 'ACKED', None
+        outcome, code, http_status_code = 'ACKED', None, None
         try:
-            self.transport.send(rr['id'], receipt['deduplication_key'])
+            response_status = self.transport.send(rr['id'], receipt['deduplication_key'])
+            if type(response_status) is int and 100 <= response_status <= 599:
+                http_status_code = response_status
         except Exception as exc:
             error_code = getattr(exc, 'code', None)
             code = (
@@ -689,6 +703,8 @@ class ReviewerWebhookWakeWorker(Services):
             )
             retryable = (getattr(exc, 'retryable', False) is True
                          and code in self._TRANSIENT_CODES)
+            status = getattr(exc, 'http_status_code', None)
+            http_status_code = status if type(status) is int and 100 <= status <= 599 else None
             outcome = 'UNKNOWN' if retryable else 'FAILED'
         with self.db.transaction() as repo:
             current = repo.get('intake_receipts', receipt['id'])
@@ -705,7 +721,7 @@ class ReviewerWebhookWakeWorker(Services):
             retry_at = (
                 min(current_rr['deadline_at'], task['deadline_at'],
                     self.clock.now() + self._retry_delay(current['attempts'], failures))
-                if outcome == 'UNKNOWN' and reason is None else 0
+                if outcome in ('ACKED', 'UNKNOWN') and reason is None else 0
             )
             rejection_reason = (
                 'PERMANENT_WAKE_REJECTION' if code == 'WAKE_HTTP_REJECTED' else
@@ -713,14 +729,14 @@ class ReviewerWebhookWakeWorker(Services):
                 'UNCLASSIFIED_WAKE_FAILURE'
             ) if outcome == 'FAILED' else None
             terminal_reason = (reason or rejection_reason or
-                               ('WAKE_DELIVERED' if outcome == 'ACKED' else
-                                'WAKE_ATTEMPTS_EXHAUSTED'
-                                if current['attempts'] >= self.max_attempts else None))
+                               ('WAKE_ATTEMPTS_EXHAUSTED'
+                                if current['attempts'] >= self._MAX_TOTAL_ATTEMPTS else None))
             if terminal_reason is not None:
                 retry_at = 0
             current.update(
                 status=outcome, lease_token=None, lease_until=0,
                 next_retry_at=retry_at, last_error_code=code,
+                last_http_status_code=http_status_code,
                 consecutive_failures=failures, terminal_reason=terminal_reason,
                 last_result=outcome, last_attempt_at=self.clock.now(),
             )
@@ -734,7 +750,8 @@ class ReviewerWebhookWakeWorker(Services):
                    intake_id=intake['id'], wake_receipt_id=current['id'],
                    attempt=current['attempts'], trigger_reason=current['recovery_reason'],
                    result=outcome, next_retry_at=retry_at,
-                   terminal_reason=terminal_reason, code=code)
+                   terminal_reason=terminal_reason, code=code,
+                   http_status_code=http_status_code)
         return outcome
 
 

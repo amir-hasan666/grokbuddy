@@ -165,7 +165,7 @@ Human 先在当前计划任务用户的 Windows Credential Manager 中创建两�
 "reviewerWakeWebhookUrlEnv": "GROKBUDDY_REVIEWER_WAKE_WEBHOOK_URL"
 ```
 
-`reviewerWakeMaxAttempts` 默认是 `3`，允许范围 `1`–`5`；wake 失败按有限次数和退避重试，达到上限后停止。HTTP 2xx 仅表示 wake transport 接受；Reviewer 仍须认证读取冻结 RR 并回传事件。wake 收据和非 Secret Audit 保存尝试次数、结果与安全错误码；wake 失败不会回滚已 `SENT` 的 outbox、失败 Task 或代替 Reviewer 结果。
+`reviewerWakeMaxAttempts` 默认是 `3`，允许范围 `1`–`5`；它是连续 transient 失败的快速重试窗口，不是 RR 的总 wake 次数。首次失败后按 5、10 秒等退避，达到该窗口后按最长 60 秒的冷却间隔继续自动检查；每个 RR 总尝试数硬上限为 64，且任何下次尝试时间都不超过原 RR/task deadline。HTTP 2xx 只表示 wake transport 接受；若 Reviewer HTTP intake 仍未 ACK，Supervisor 也会在退避到期后重新唤醒同一 RR。原 RR、review round、outbox `delivery_key`、冻结 envelope 与 wake 去重键均保持不变。Reviewer intake ACK、已 APPLY 的 ReviewStarted/ReviewCompleted、过期、stale/superseded、明确拒绝或总尝试数耗尽会终止重试；待校验的 `READY` Reviewer event 仅临时抑制 wake，拒绝后可继续恢复。wake 收据 JSON 持久化 `next_retry_at`、`consecutive_failures`、`recovery_reason`、`terminal_reason`、`last_result`、`last_attempt_at`、`last_http_status_code`，每次 claim 与结果另有非 Secret Audit；HTTP 状态码本身不含 Secret，响应正文不保存。wake 失败不会回滚已 `SENT` 的 outbox、失败 Task 或代替 Reviewer 结果。
 
 运行只读检查；启用后应比基础配置多看到两个可选 Target 的 `PRESENT`：
 
