@@ -369,7 +369,8 @@ def test_remote_auth_surface_query_parity_and_no_business_writes(runtime, caplog
                             "submit_plan",
                             "request_plan_review",
                             "respond_to_review",
-                            "submit_artifact",
+                                "submit_artifact",
+                                "record_workbuddy_message",
                             "request_final_review",
                             "human_gate_decide",
                             "close_task",
@@ -412,6 +413,7 @@ def test_remote_auth_surface_query_parity_and_no_business_writes(runtime, caplog
     assert TOOL_NAMES == (
         "create_task", "get_task", "submit_plan", "request_plan_review",
             "get_plan_review", "respond_to_review", "submit_artifact",
+            "record_workbuddy_message",
             "request_final_review", "get_final_review", "get_task_status",
             "human_gate_decide", "close_task",
         )

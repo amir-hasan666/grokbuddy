@@ -1,10 +1,10 @@
 # 状态机与守卫
 
-这是 Phase 0 规范。Task、ReviewRequest、Finding、Verdict 使用不同枚举，禁止混用。
+Task、ReviewRequest、Finding、Verdict 使用不同枚举，禁止混用。下方旧 Phase 0 表保留历史兼容；新建 V1 Task 使用本文件的 V1 覆盖表及 [双轮决策合同](docs/contracts/V1_REVIEW_DECISION_POLICY.md)。
 
 ## Task 枚举
 
-`NEW, PLANNING, PLAN_REVIEW_PENDING, PLAN_REVIEWING, PLAN_CHANGES_REQUIRED, PLAN_APPROVED, EXECUTING, SELF_TESTING, FINAL_REVIEW_PENDING, FINAL_REVIEWING, FINAL_CHANGES_REQUIRED, AWAITING_HUMAN_APPROVAL, BLOCKED, ESCALATED, FAILED, CANCELLED, DONE`。
+`NEW, PLANNING, PLAN_REVIEW_PENDING, PLAN_REVIEWING, PLAN_CHANGES_REQUIRED, PLAN_HUMAN_REVIEW, PLAN_APPROVED, EXECUTING, SELF_TESTING, FINAL_REVIEW_PENDING, FINAL_REVIEWING, FINAL_CHANGES_REQUIRED, FINAL_HUMAN_REVIEW, AWAITING_HUMAN_APPROVAL, BLOCKED, ESCALATED, FAILED, CANCELLED, DONE`。
 
 ```mermaid
 flowchart LR
@@ -32,7 +32,21 @@ flowchart LR
   FINAL_REVIEW_PENDING --> ESCALATED
 ```
 
-图是主流程；以下表才是完整迁移规范。所有普通迁移要求 actor 权限、expected task version、未超任务 deadline，在一个事务写状态 + Audit + event；未列出的迁移默认拒绝。超时处理和人类取消不受“未超时”守卫阻挡；人类 RESUME/override 若已超时，须在同一明确决策中批准新 deadline 并审计，不能隐式延长。
+图和下方旧表是 Phase 0 历史兼容规则。新 V1 的审核决定按以下覆盖表执行；所有普通迁移仍要求 actor 权限、expected task version、未超任务 deadline，并在一个事务写状态 + Audit + event。
+
+| 新 V1 审核起点 | 有效结果或故障 | 终点 |
+| --- | --- | --- |
+| PLAN_REVIEW_PENDING / PLAN_REVIEWING | R1 PASS，无未关闭实质 Finding | PLAN_APPROVED |
+| 同上 | R1 NEEDS_CHANGES 或 BLOCK，具有可执行 Finding | PLAN_CHANGES_REQUIRED |
+| 同上 | R2 PASS | PLAN_APPROVED |
+| 同上 | R2 BLOCK，具有实质阻断证据 | PLAN_HUMAN_REVIEW |
+| FINAL_REVIEW_PENDING / FINAL_REVIEWING | R1 PASS，冻结包与自检有效 | DONE / FINAL_REVIEW_PASS |
+| 同上 | R1 NEEDS_CHANGES 或 BLOCK，具有可执行 Finding | FINAL_CHANGES_REQUIRED |
+| 同上 | R2 PASS | DONE / FINAL_REVIEW_PASS |
+| 同上 | R2 BLOCK，具有实质阻断证据 | FINAL_HUMAN_REVIEW |
+| 两类审核中 | timeout、投递耗尽、Reviewer failure | 对应 Human Gate，保留技术原因，无 Review verdict |
+
+V1 R2 `NEEDS_CHANGES`、不匹配策略、无效结果均拒绝 APPLY；不记新 Review，也不创建 R3。V1 Plan Human override 不得越过 Grok PASS 编码。Human Gate 的技术故障如尚有二轮内额度，可由独立 Human 明确继续；不能扩展绝对轮次上限。下表的 `BLOCKED/ESCALATED` 与 Plan 2 / Final 3 只适用于旧 Task。
 
 | 起点 | 触发/守卫 | 终点 |
 |---|---|---|
@@ -81,6 +95,8 @@ DONE/CANCELLED/FAILED 终态不能自动重开；新需求创建新 Task。overr
 终态保持不变。无效 JSON、错误 actor/signature/hash/版本不推进 RR/Task，仅审计并等待合法事件或 deadline。合法最后一轮结果保留 RR COMPLETED；如果未通过，Task ESCALATED。没有多建一个虚假的“超额 RR”。
 
 ## 轮次与边界优先级
+
+新 V1 Task 依 [双轮决策合同](docs/contracts/V1_REVIEW_DECISION_POLICY.md) 冻结 Plan/Final 各 2 轮。Plan R1 PASS 可直接 PLAN_APPROVED；R1 NEEDS_CHANGES/BLOCK 才修订一次并进入 R2。Final R1 PASS 可直接 DONE；R1 NEEDS_CHANGES/BLOCK 修复一次。两类 R2 均仅 PASS/BLOCK，未通过进入对应 Human Gate，不自动创建 R3。下述 2/3 默认与 ESCALATED 规则是旧 Task 的历史兼容规则，不适用于带 V1 策略版本的 Task。
 
 默认 plan=2/final=3。第 2 次 Plan / 第 3 次 Final 仍有完整通过机会；只有未通过且无下一轮额度，或试图再申请超限轮次，才升级。投递重试不耗新轮次，Finding 操作不耗轮次；请求预留即占额度，见 [数据模型](DATA_MODEL.md)。
 

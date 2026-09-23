@@ -13,6 +13,20 @@ from test_phase6_pack_b import V2Flow, event_for, key
 from test_phase6_trigger_gate import counts, create, signed_evidence
 
 
+class LegacyV2Flow(V2Flow):
+    """Disposable fixture representing a Task created before the V1 policy freeze."""
+
+    def __init__(self, tmp_path):
+        super().__init__(tmp_path)
+        with self.r.db.transaction() as repo:
+            task = repo.get('tasks', self.task_id)
+            task.pop('decision_policy_version', None)
+            task.pop('decision_policy_snapshot', None)
+            task['plan_limit'] = 2
+            task['final_limit'] = 3
+            repo.save('tasks', task)
+
+
 def _plan_gate(flow):
     flow.plan()
     first = flow.request(scenario='NEEDS_CHANGES')
@@ -46,7 +60,7 @@ def _unresolved(flow):
 
 
 def test_plan_gate_accept_is_cas_idempotent_and_keeps_review_immutable(tmp_path):
-    flow = V2Flow(tmp_path / 'plan-accept')
+    flow = LegacyV2Flow(tmp_path / 'plan-accept')
     request_id = _plan_gate(flow)
     original_review = deepcopy(flow.r.hub.get_review(request_id))
     expected_version = flow.version
@@ -81,7 +95,7 @@ def test_plan_gate_accept_is_cas_idempotent_and_keeps_review_immutable(tmp_path)
 
 
 def test_plan_gate_continue_grants_audited_bounded_round(tmp_path):
-    flow = V2Flow(tmp_path / 'plan-continue')
+    flow = LegacyV2Flow(tmp_path / 'plan-continue')
     _plan_gate(flow)
     with pytest.raises(HubError, match='configured Human hard limit'):
         flow.r.hub.human_gate_decide(
@@ -107,7 +121,7 @@ def test_plan_gate_continue_grants_audited_bounded_round(tmp_path):
 
 
 def test_plan_gate_modify_binds_scope_and_requires_explicit_budget(tmp_path):
-    flow = V2Flow(tmp_path / 'plan-modify')
+    flow = LegacyV2Flow(tmp_path / 'plan-modify')
     _plan_gate(flow)
     selected = _unresolved(flow)
     with pytest.raises(HubError, match='explicit Human review budget'):
@@ -129,7 +143,7 @@ def test_plan_gate_modify_binds_scope_and_requires_explicit_budget(tmp_path):
 
 
 def test_final_gate_accept_sets_human_override_and_preserves_verdict(tmp_path):
-    flow = V2Flow(tmp_path / 'final-accept')
+    flow = LegacyV2Flow(tmp_path / 'final-accept')
     request_id = _final_gate(flow)
     original = deepcopy(flow.r.hub.get_review(request_id))
     accepted = flow.r.hub.human_gate_decide(
@@ -149,7 +163,7 @@ def test_final_gate_accept_sets_human_override_and_preserves_verdict(tmp_path):
 
 
 def test_final_gate_continue_and_modify_leave_via_declared_edges(tmp_path):
-    continued_flow = V2Flow(tmp_path / 'final-continue')
+    continued_flow = LegacyV2Flow(tmp_path / 'final-continue')
     _final_gate(continued_flow)
     continued = continued_flow.r.hub.human_gate_decide(
         'human', continued_flow.task_id, 'CONTINUE',
@@ -164,7 +178,7 @@ def test_final_gate_continue_and_modify_leave_via_declared_edges(tmp_path):
     assert continued_flow.r.hub.get_review(
         fourth['review_request_id'])['request']['review_round'] == 4
 
-    modified_flow = V2Flow(tmp_path / 'final-modify')
+    modified_flow = LegacyV2Flow(tmp_path / 'final-modify')
     _final_gate(modified_flow)
     selected = _unresolved(modified_flow)
     modified = modified_flow.r.hub.human_gate_decide(
@@ -180,7 +194,7 @@ def test_final_gate_continue_and_modify_leave_via_declared_edges(tmp_path):
 
 
 def test_final_gate_out_of_scope_modify_returns_to_plan_without_assignment(tmp_path):
-    flow = V2Flow(tmp_path / 'final-replan')
+    flow = LegacyV2Flow(tmp_path / 'final-replan')
     _final_gate(flow)
     before = len(flow.rows('worker_assignments', task_id=flow.task_id))
     modified = flow.r.hub.human_gate_decide(
@@ -196,7 +210,7 @@ def test_final_gate_out_of_scope_modify_returns_to_plan_without_assignment(tmp_p
 
 @pytest.mark.anyio
 async def test_plan_gate_abort_via_mcp_clears_context_and_is_not_sticky(tmp_path):
-    flow = V2Flow(tmp_path / 'plan-abort-mcp')
+    flow = LegacyV2Flow(tmp_path / 'plan-abort-mcp')
     _plan_gate(flow)
     conversation_id = flow.task['conversation_id']
     before = counts(flow.r)
@@ -223,7 +237,7 @@ async def test_plan_gate_abort_via_mcp_clears_context_and_is_not_sticky(tmp_path
 
 
 def test_final_gate_abort_cancels_pending_outbox_and_stops_loop(tmp_path):
-    flow = V2Flow(tmp_path / 'final-abort')
+    flow = LegacyV2Flow(tmp_path / 'final-abort')
     request_id = _final_gate(flow)
     with flow.r.db.transaction() as repo:
         outbox = repo.find('outbox_events', review_request_id=request_id)[0]
@@ -239,7 +253,7 @@ def test_final_gate_abort_cancels_pending_outbox_and_stops_loop(tmp_path):
 
 
 def test_gate_freeze_blocks_dispatch_worker_and_callback_progress(tmp_path):
-    flow = V2Flow(tmp_path / 'freeze-negative')
+    flow = LegacyV2Flow(tmp_path / 'freeze-negative')
     request_id = _final_gate(flow)
     before_task = deepcopy(flow.task)
     before_jobs = len(flow.rows('mock_jobs'))

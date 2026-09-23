@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GrokBuddy Control Center</title>
+  <link rel="stylesheet" href="/control/style.css">
+  <script defer src="/control/app.js"></script>
+</head>
+<body>
+  <header><h1>GrokBuddy Control Center</h1><p>Hub 记录 · 只读</p></header>
+  <main>
+    <section>
+      <form id="search">
+        <label for="task-id">Task ID</label>
+        <input id="task-id" autocomplete="off" placeholder="TASK-..." required>
+        <button type="submit">查看</button>
+      </form>
+      <p id="error" role="alert"></p>
+    </section>
+    <section id="task-list" aria-label="最近 Task"></section>
+    <section id="task-detail" aria-label="Task 详情"></section>
+  </main>
+</body>
+</html>

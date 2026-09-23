@@ -2,6 +2,7 @@ from grokbuddy.domain.model import HubError, Role, TERMINAL, CLOSED_FINDING
 from grokbuddy.domain.rules import finding_transition
 from .common import Services, uid, digest, canonical, audit
 from .tasks import _scope_within, _validated_scope
+from grokbuddy.domain.review_policy import V1_LIMIT, is_v1_dual_round
 
 
 HUMAN_GATE_STATES = {'PLAN_HUMAN_REVIEW', 'FINAL_HUMAN_REVIEW'}
@@ -63,7 +64,7 @@ class GovernanceService(Services):
 
     def _unresolved_finding_ids(self, repo, task):
         return sorted(finding['id'] for finding in repo.find('review_findings', task_id=task['id'])
-                      if finding['status'] not in CLOSED_FINDING)
+                      if finding['status'] not in CLOSED_FINDING and not finding.get('advisory', False))
 
     def _set_human_deadline(self, task, new_deadline_at, *, required=False):
         if new_deadline_at is None:
@@ -77,6 +78,8 @@ class GovernanceService(Services):
 
     def _grant_review_budget(self, repo, task, actor, review_type, extra_review_budget,
                              reason, related_request_id):
+        if is_v1_dual_round(task):
+            raise HubError('V1 Task cannot extend its two-round review limit')
         if type(extra_review_budget) is not int or extra_review_budget < 1:
             raise HubError('Extra review budget must be a positive integer')
         plan = review_type == 'PLAN_REVIEW'
@@ -107,6 +110,8 @@ class GovernanceService(Services):
         rounds = repo.find('review_requests', task_id=task['id'], review_type=review_type)
         current_round = max((request['review_round'] for request in rounds), default=0)
         limit_field = 'plan_limit' if review_type == 'PLAN_REVIEW' else 'final_limit'
+        if is_v1_dual_round(task) and (extra_review_budget or current_round >= V1_LIMIT):
+            raise HubError('V1 Task cannot enter a third review round')
         approval = None
         if extra_review_budget:
             approval = self._grant_review_budget(
@@ -176,6 +181,8 @@ class GovernanceService(Services):
 
             self.ensure_actions_closed(repo, task)
             if decision == 'ACCEPT':
+                if plan and is_v1_dual_round(task):
+                    raise HubError('V1 Plan requires a Grok PASS before coding')
                 if any(value not in (None, [], 0) for value in
                        (modification_scope, finding_ids, extra_review_budget)):
                     raise HubError('Accept does not accept modification or budget fields')
@@ -293,8 +300,13 @@ class GovernanceService(Services):
 
             if any(value is not None for value in (modification_scope, finding_ids)):
                 raise HubError('Continue does not accept modification fields')
-            budget_approval = self._grant_review_budget(
-                repo, task, actor, review_type, extra_review_budget, reason, related['id'])
+            if is_v1_dual_round(task):
+                if extra_review_budget or related['review_round'] >= V1_LIMIT:
+                    raise HubError('V1 Task cannot extend its two-round review limit')
+                budget_approval = None
+            else:
+                budget_approval = self._grant_review_budget(
+                    repo, task, actor, review_type, extra_review_budget, reason, related['id'])
             deadline = self._set_human_deadline(task, new_deadline_at, required=True)
             self._stop_task_automation(repo, task, 'HUMAN_GATE_CONTINUE')
             reuse_frozen_input = bool(
@@ -307,7 +319,7 @@ class GovernanceService(Services):
             approval = self._decision(
                 repo, task, actor, 'HUMAN_GATE_CONTINUE', reason,
                 review_type=review_type, related_review_request_id=related['id'],
-                budget_approval_id=budget_approval['id'],
+                budget_approval_id=budget_approval['id'] if budget_approval else None,
                 extra_review_budget=extra_review_budget,
                 new_round_limit=task['plan_limit' if plan else 'final_limit'],
                 new_deadline_at=deadline, reuse_frozen_input=reuse_frozen_input)
@@ -328,7 +340,8 @@ class GovernanceService(Services):
             if action == 'human_continue_final_rework':
                 assignment = self._create_worker_assignment(repo, task, actor)
             response = {'task': task, 'decision': decision, 'approval_id': approval['id'],
-                        'budget_approval_id': budget_approval['id'], 'assignment': assignment}
+                        'budget_approval_id': budget_approval['id'] if budget_approval else None,
+                        'assignment': assignment}
             box['response'] = response
             return response
 
@@ -448,6 +461,8 @@ class GovernanceService(Services):
             task = self.task_for(repo, task_id, actor, expected_version, live=False)
             if review_type not in ('PLAN_REVIEW', 'FINAL_REVIEW') or type(new_limit) is not int or new_limit < 1 or new_deadline <= self.clock.now():
                 raise HubError('Explicit future deadline and review budget required')
+            if is_v1_dual_round(task) and new_limit > V1_LIMIT:
+                raise HubError('V1 Task cannot enter a third review round')
             previous = repo.find('review_requests', task_id=task_id, review_type=review_type)
             if new_limit <= max((r['review_round'] for r in previous), default=0):
                 raise HubError('Resume budget must permit a new evaluation')
@@ -473,6 +488,8 @@ class GovernanceService(Services):
             task = self.task_for(repo, task_id, actor, expected_version, live=False)
             if review_type not in ('PLAN_REVIEW', 'FINAL_REVIEW') or expires_at <= self.clock.now():
                 raise HubError('Invalid override scope or expiry')
+            if review_type == 'PLAN_REVIEW' and is_v1_dual_round(task):
+                raise HubError('V1 Plan requires a Grok PASS before coding')
             if self.clock.now() >= task['deadline_at']:
                 if new_deadline is None or new_deadline <= self.clock.now():
                     raise HubError('Expired task requires explicit new deadline')
@@ -485,7 +502,8 @@ class GovernanceService(Services):
             artifact, _ = self.artifact(repo, task_id, input_artifact_id)
             if not plan and not task.get('self_test_passed'):
                 raise HubError('Override does not bypass self-test evidence')
-            unresolved = {f['id'] for f in repo.find('review_findings', task_id=task_id) if f['status'] not in CLOSED_FINDING}
+            unresolved = {f['id'] for f in repo.find('review_findings', task_id=task_id)
+                          if f['status'] not in CLOSED_FINDING and not f.get('advisory', False)}
             if set(acknowledged_findings) != unresolved:
                 raise HubError('Override must acknowledge every unresolved finding')
             decision = self._decision(repo, task, actor, 'REVIEW_OVERRIDE', reason, review_type=review_type,

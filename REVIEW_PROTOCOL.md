@@ -1,5 +1,7 @@
 # 审核协议总览
 
+新 V1 Task 的轮次/verdict/Finding 决策见 [V1 Review Decision Policy](docs/contracts/V1_REVIEW_DECISION_POLICY.md)；下文 v1 轻量 Plan 与旧 Task 描述保持历史兼容。Review 协议版本与任务冻结的产品决策策略是两个独立字段。
+
 协议版本 v1；GitHub 控制平面 marker 为 `[AI-COLLAB v1]` / `[AI-REVIEW v1]`，Artifact 数据平面是结构化 JSON。规范字段见 [PROTOCOL_V1](docs/PROTOCOL_V1.md)，机器可读草案见 [request schema](docs/contracts/review-request.schema.json) 和 [result schema](docs/contracts/review-result.schema.json)。Phase 0 校验 schema/examples，不把它们当作可调用服务。
 
 ## 请求

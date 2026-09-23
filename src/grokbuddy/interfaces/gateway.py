@@ -20,6 +20,7 @@ TOOL_NAMES = (
     "get_plan_review",
     "respond_to_review",
     "submit_artifact",
+    "record_workbuddy_message",
     "request_final_review",
     "get_final_review",
     "get_task_status",
@@ -227,6 +228,12 @@ class ClientGateway:
             mime,
         )
 
+    def _record_workbuddy_message(self, payload):
+        _strict(payload, {"task_id", "stage", "body", "idempotency_key"})
+        return self.hub.record_workbuddy_message(
+            self.actor_id, _text(payload, "task_id"), _text(payload, "stage"),
+            _text(payload, "body"), _text(payload, "idempotency_key"))
+
     def _artifact_ref(self, artifact_id):
         artifact = self.hub.get_artifact(artifact_id)
         return {"artifact_id": artifact["id"], "sha256": artifact["sha256"]}
@@ -239,7 +246,7 @@ class ClientGateway:
                 "idempotency_key", "begin_execution", "change_scope", "changed_files",
                 "self_test_summary", "known_risks", "unverified_items",
             },
-            {"reviewer_id"},
+            {"reviewer_id", "operation_method", "generated_files"},
         )
         if type(payload["begin_execution"]) is not bool:
             raise HubError("begin_execution must be a boolean")
@@ -292,6 +299,19 @@ class ClientGateway:
             "profile_sha256": profile["sha256"],
             "profile_artifact_id": profile["id"],
         }
+        if "operation_method" in payload:
+            package["operation_method"] = _text(payload, "operation_method")
+        if "generated_files" in payload:
+            files = payload["generated_files"]
+            if not isinstance(files, list) or not all(
+                    isinstance(item, dict) and set(item) == {"path", "artifact_id"}
+                    and all(isinstance(value, str) and value for value in item.values())
+                    for item in files):
+                raise HubError("generated_files must contain path and artifact_id")
+            package["generated_files"] = [
+                {"path": item["path"], **self._artifact_ref(item["artifact_id"])}
+                for item in files
+            ]
         self.hub.submit_final_package(
             self.actor_id,
             task_id,

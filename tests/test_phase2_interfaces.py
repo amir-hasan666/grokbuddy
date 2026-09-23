@@ -70,7 +70,8 @@ def complete_plan(runtime, gateway, scenario="PASS"):
 def test_declared_phase2_tool_surface_is_exact():
     assert TOOL_NAMES == (
         "create_task", "get_task", "submit_plan", "request_plan_review", "get_plan_review",
-        "respond_to_review", "submit_artifact", "request_final_review", "get_final_review",
+        "respond_to_review", "submit_artifact", "record_workbuddy_message",
+        "request_final_review", "get_final_review",
         "get_task_status", "human_gate_decide", "close_task",
     )
 

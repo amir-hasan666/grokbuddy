@@ -10,6 +10,8 @@ class FindingService(Services):
             if 'replay' in box:
                 return box['replay']
             finding = repo.get('review_findings', finding_id)
+            if finding.get('advisory', False):
+                raise HubError('Advisory finding is not an actionable Builder fix')
             task = self.task_for(repo, finding['task_id'], actor, expected_version)
             if task['active_rr_id']:
                 raise HubError('Finding responses are frozen during an active review')

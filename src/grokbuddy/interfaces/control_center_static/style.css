@@ -1,0 +1,25 @@
+:root { color-scheme: light; font-family: system-ui, "Microsoft YaHei", sans-serif; }
+body { margin: 0; background: #f5f7fa; color: #17212d; }
+header { background: #142738; color: white; padding: 1.1rem max(1rem, calc((100vw - 1100px)/2)); }
+header h1 { margin: 0; font-size: 1.45rem; }
+header p { margin: .3rem 0 0; color: #c7d8e6; }
+main { max-width: 1100px; margin: 1.2rem auto; padding: 0 1rem 3rem; }
+section, article { background: white; border: 1px solid #d7dfe7; border-radius: .5rem; padding: 1rem; margin: 0 0 1rem; }
+section section { margin: .8rem 0; }
+h2 { margin: 0 0 .8rem; font-size: 1.22rem; }
+h3 { margin: .8rem 0 .5rem; font-size: 1.06rem; }
+form { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+input { min-width: 20rem; max-width: 100%; padding: .5rem; }
+button { background: #164d73; color: white; border: 0; padding: .47rem .7rem; border-radius: .3rem; cursor: pointer; }
+button:hover { background: #0c3552; }
+button.link { border: 0; padding: .1rem 0; background: none; color: #16547b; text-decoration: underline; }
+.blocked { border-left: .35rem solid #b23a34; background: #fff4f1; }
+.warning { color: #9d332e; font-weight: 700; }
+.muted { color: #586779; }
+.row { padding: .55rem 0; border-bottom: 1px solid #e7edf2; }
+.row:last-child { border-bottom: 0; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f0f3f6; padding: .8rem; border-radius: .3rem; max-height: 28rem; overflow: auto; }
+.artifact { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.artifact button { padding: .22rem .5rem; }
+.artifact a { color: #16547b; }
+#error { color: #a62c2c; }

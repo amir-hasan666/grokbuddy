@@ -196,6 +196,16 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         return _call(gateway, "submit_artifact", payload)
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
+    def record_workbuddy_message(
+        task_id: str, stage: str, body: str, idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Append one original WorkBuddy business message to the Hub Task."""
+        return _call(gateway, "record_workbuddy_message", {
+            "task_id": task_id, "stage": stage, "body": body,
+            "idempotency_key": idempotency_key,
+        })
+
+    @server.tool(annotations=IDEMPOTENT_WRITE)
     def request_final_review(
         task_id: str,
         test_artifact_id: str,
@@ -209,6 +219,8 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         known_risks: list[str],
         unverified_items: list[str],
         reviewer_id: str | None = None,
+        operation_method: str | None = None,
+        generated_files: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Submit the final package and enqueue review, returning only PENDING."""
         payload = {
@@ -226,6 +238,10 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         }
         if reviewer_id is not None:
             payload["reviewer_id"] = reviewer_id
+        if operation_method is not None:
+            payload["operation_method"] = operation_method
+        if generated_files is not None:
+            payload["generated_files"] = generated_files
         return _call(gateway, "request_final_review", payload)
 
     @server.tool(annotations=READ_ONLY)

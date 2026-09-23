@@ -33,6 +33,8 @@ def _parser():
     parser.add_argument("--contracts-dir", default=str(ROOT / "docs" / "contracts"))
     parser.add_argument("--webhook-secret-env", default="GITHUB_WEBHOOK_SECRET")
     parser.add_argument("--mcp-token-env", default="GROKBUDDY_MCP_TOKEN")
+    parser.add_argument("--control-token-env", default="",
+                        help="Dedicated optional Human read-only token environment name")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument(
@@ -178,6 +180,19 @@ def main(argv=None):
             raise HubError(
                 f"MCP token environment variable {args.mcp_token_env} is not set"
             )
+        control_token = None
+        if args.control_token_env:
+            if (not re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", args.control_token_env)
+                    or args.control_token_env in {
+                        args.webhook_secret_env, args.mcp_token_env, args.grok_token_env,
+                        args.github_comment_token_env, args.reviewer_wake_webhook_key_env,
+                        args.reviewer_wake_webhook_url_env, "PUBLIC_BASE",
+                    }):
+                raise HubError("Control Center token environment name must be independent")
+            control_token = os.environ.get(args.control_token_env)
+            if (not control_token or len(control_token.encode("utf-8")) < 32
+                    or control_token in (mcp_token, webhook_secret)):
+                raise HubError("Control Center requires an independent protected token")
         public_hosts, public_base_url = _public_configuration(args)
         reviewer_registry, grok_reviewer_actor = _reviewer_configuration(args)
         default_reviewer = grok_reviewer_actor or 'mock-reviewer'
@@ -200,6 +215,8 @@ def main(argv=None):
                 raise HubError("Grok Reviewer token and public HTTPS origin are required")
             if reviewer_token in (mcp_token, webhook_secret):
                 raise HubError("Grok Reviewer token must be independent of existing endpoint secrets")
+            if control_token == reviewer_token:
+                raise HubError("Control Center token must differ from Reviewer token")
             with runtime.db.transaction() as repo:
                 reviewer = repo.get('actors', grok_reviewer_actor)
             if reviewer['role'] != 'REVIEWER' or reviewer['reviewer_type'] != 'grok_bot':
@@ -214,6 +231,8 @@ def main(argv=None):
                 comment_token = os.environ.get(args.github_comment_token_env)
                 if not comment_token:
                     raise HubError('GitHub Comment token is required for production Supervisor')
+                if control_token == comment_token:
+                    raise HubError("Control Center token must differ from GitHub token")
                 if not 1 <= args.reviewer_wake_max_attempts <= 5:
                     raise HubError('Reviewer wake max attempts must be between 1 and 5')
                 wake_transport = _reviewer_wake_transport(args)
@@ -256,6 +275,8 @@ def main(argv=None):
             public_hosts=public_hosts,
             actor_id=args.actor,
             grok_reviewer_app=grok_app,
+            control_token=control_token,
+            control_reviewer_actor_id=grok_reviewer_actor or "grok-reviewer-b",
             supervisor_readiness_check=(
                 supervisor_service.is_ready if supervisor_service is not None else None),
         )

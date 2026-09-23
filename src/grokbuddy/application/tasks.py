@@ -1,10 +1,12 @@
 import json
 import hashlib
+import re
 from grokbuddy.domain.model import (ACTIVE_REQUEST, ActiveConversationTask, HubError,
                                     PermissionDenied, Role, TERMINAL,
                                     TriggerEvidenceInvalid, TriggerEvidenceRequired)
 from .common import Services, audit, uid, canonical, digest
 from .trigger import verify_trigger
+from grokbuddy.domain.review_policy import V1_DUAL_ROUND, V1_LIMIT
 
 
 def _validated_scope(scope):
@@ -38,7 +40,49 @@ def _scope_within(proposed, approved):
     return True, proposed
 
 
+def _display_file_path(path):
+    """A package filename is a relative display name, never a host file path."""
+    return (isinstance(path, str) and 1 <= len(path) <= 500
+            and not path.startswith('/') and '\\' not in path and ':' not in path
+            and not any(ord(char) < 32 for char in path)
+            and not path.lower().endswith(('.log', '.trace'))
+            and 'logs' not in (part.lower() for part in path.split('/'))
+            and all(part not in ('', '.', '..') for part in path.split('/')))
+
+
+_RESTRICTED_TEXT = re.compile(
+    r"(?im)^\s*authorization\s*:|(?:secret|token|password|api[_-]?key)\s*[:=]"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+\S+"
+    r"|\b[A-Za-z]:\\|\\\\[^\s\\]+\\"
+    r"|(?<![A-Za-z0-9])/(?:home|Users|tmp|var|mnt|etc)/"
+)
+
+
 class TaskService(Services):
+    def record_workbuddy_message(self, actor_id, task_id, stage, body, key):
+        """Capture one Task business message without changing Task/Review state."""
+        if stage not in {'PLAN', 'PLAN_REVISION', 'CODE', 'TEST', 'DELIVERY'}:
+            raise HubError('Unknown WorkBuddy message stage')
+        if not isinstance(body, str) or not body.strip() or len(body) > 64000:
+            raise HubError('WorkBuddy message must contain 1 to 64000 characters')
+        if _RESTRICTED_TEXT.search(body):
+            raise HubError('WorkBuddy message contains restricted content')
+        with self.command(actor_id, 'record_workbuddy_message', key,
+                          [task_id, stage, body], Role.BUILDER) as (repo, actor, box):
+            if 'replay' in box:
+                return box['replay']
+            if actor.get('worker_type') or actor.get('trigger_source'):
+                raise PermissionDenied('Ordinary Builder principal required')
+            self.task_for(repo, task_id, actor, live=False)
+            result = self.add_artifact(
+                repo, task_id, actor, 'WORKBUDDY_MESSAGE',
+                canonical({'schema_version': 1, 'stage': stage, 'body': body}),
+                'application/json')
+            audit(repo, self.clock, actor, 'WORKBUDDY_MESSAGE_RECORDED', task_id,
+                  artifact_id=result['id'], stage=stage)
+            box['response'] = result
+            return result
+
     def create_task(self, actor_id, description, key, profile='generic', profile_version='1.0',
                     trigger_evidence=None):
         if not isinstance(description, str) or not description.strip():
@@ -72,7 +116,12 @@ class TaskService(Services):
                         self_test_id=None, total_findings_created=0, escalation_reason=None,
                          revision_round=0,
                          completion_basis=None, gate_reason=None, automation_frozen=False,
-                         plan_limit=self.settings.max_plan_review_rounds, final_limit=self.settings.max_final_review_rounds,
+                         plan_limit=V1_LIMIT if frozen else self.settings.max_plan_review_rounds,
+                         final_limit=V1_LIMIT if frozen else self.settings.max_final_review_rounds,
+                         decision_policy_version=V1_DUAL_ROUND if frozen else None,
+                         decision_policy_snapshot=(dict(version=V1_DUAL_ROUND,
+                                                        plan_max_rounds=V1_LIMIT,
+                                                        final_max_rounds=V1_LIMIT) if frozen else None),
                          plan_extra_budget=0, final_extra_budget=0,
                         review_protocol_version='v2' if frozen is not None else 'v1',
                         grokbuddy_enabled=frozen is not None,
@@ -157,7 +206,8 @@ class TaskService(Services):
                 finding_ids = set(reviews[0].get('actionable_finding_ids', [])) if reviews else set()
                 findings = [finding for finding in findings if finding['id'] in finding_ids]
             return [finding for finding in findings
-                    if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')]
+                    if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')
+                    and not finding.get('advisory', False)]
 
     def audit_log(self, task_id):
         with self.db.transaction() as repo:
@@ -278,6 +328,23 @@ class TaskService(Services):
                 raise HubError('Package revision mismatch')
             if package['self_test']['status'] != 'PASS':
                 raise HubError('Package self-test did not pass')
+            if task.get('decision_policy_version') == V1_DUAL_ROUND:
+                method = package.get('operation_method')
+                files = package.get('generated_files')
+                if not isinstance(method, str) or not method.strip():
+                    raise HubError('V1 Final package requires operation method')
+                if _RESTRICTED_TEXT.search(method):
+                    raise HubError('Operation method contains restricted content')
+                if not isinstance(files, list) or not files:
+                    raise HubError('V1 Final package requires generated file Artifacts')
+                paths = [item['path'] for item in files]
+                if (any(not _display_file_path(path) for path in paths)
+                        or len(set(paths)) != len(paths)
+                        or not set(paths).issubset(set(package['changed_files']))):
+                    raise HubError('Generated file paths must be unique approved relative paths')
+                for item in files:
+                    self.artifact(repo, task_id, item['artifact_id'], item['sha256'],
+                                  {'SOURCE_FILE'})
             if package['original_task']['artifact_id'] != task['original_task_id'] or package['approved_plan']['artifact_id'] != task['approved_plan_id']:
                 raise HubError('Package must reference original task and approved plan')
             refs = [package['original_task'], package['approved_plan'], *package['test_results']]

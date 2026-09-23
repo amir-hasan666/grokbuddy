@@ -147,6 +147,12 @@ class V2Flow:
             'profile_sha256': profile['sha256'],
             'profile_artifact_id': profile['id'],
         }
+        if task.get('decision_policy_version') == 'grokbuddy-v1-dual-round':
+            generated = self.artifact('SOURCE_FILE', 'generated local file ' + key())
+            package['operation_method'] = 'Run the bounded local change.'
+            package['generated_files'] = [
+                {'path': 'local.txt', **ref(generated['id'])}
+            ]
         return self.r.hub.submit_final_package(
             self.owner, self.task_id, package, self.version, key())
 
@@ -276,7 +282,7 @@ def test_plan_round_guard_revision_counter_and_gate_late_event(tmp_path):
     fix = flow.artifact('DIFF', 'plan finding correction')
     flow.r.hub.respond_finding(flow.owner, finding['id'], 'fix', fix['id'], flow.version, key())
     assert flow.task['revision_round'] == 1
-    second = flow.request(scenario='NEEDS_CHANGES')
+    second = flow.request(scenario='BLOCK')
     flow.drive()
     assert flow.task['state'] == 'PLAN_HUMAN_REVIEW'
     assert flow.task['automation_frozen'] is True
@@ -409,16 +415,15 @@ def test_final_changes_fix_and_re_review_pass_on_same_task(tmp_path):
 def test_final_round_guard_uses_same_task_assignments_and_revision_semantics(tmp_path):
     flow = V2Flow(tmp_path / 'final-rounds')
     flow.to_final_review('NEEDS_CHANGES')
-    for expected_revision in (1, 2):
-        flow.fix_current_open_finding()
-        assert flow.task['state'] == 'EXECUTING'
-        flow.package()
-        assert flow.task['revision_round'] == expected_revision
-        flow.request('FINAL_REVIEW', 'NEEDS_CHANGES')
-        flow.drive()
+    flow.fix_current_open_finding()
+    assert flow.task['state'] == 'EXECUTING'
+    flow.package()
+    assert flow.task['revision_round'] == 1
+    flow.request('FINAL_REVIEW', 'BLOCK')
+    flow.drive()
     assert flow.task['state'] == 'FINAL_HUMAN_REVIEW'
     assert flow.task['automation_frozen'] is True
-    assert len(flow.rows('review_requests', review_type='FINAL_REVIEW')) == 3
+    assert len(flow.rows('review_requests', review_type='FINAL_REVIEW')) == 2
     assignments = flow.rows('worker_assignments', task_id=flow.task_id)
-    assert [item['generation'] for item in assignments] == [1, 2, 3]
+    assert [item['generation'] for item in assignments] == [1, 2]
     assert flow.task['completion_basis'] is None

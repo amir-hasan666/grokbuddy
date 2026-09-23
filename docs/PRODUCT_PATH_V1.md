@@ -1,6 +1,6 @@
 # GrokBuddy V1 Product Path and Scope Reset
 
-Human 冻结日期：2026-09-23（Asia/Shanghai）。状态：**V1 产品范围已冻结；文档控制面已重定义；实现与验收尚未完成。**
+Human 冻结日期：2026-09-23（Asia/Shanghai）；同日补充裁决：方案 R1 PASS 且无未关闭实质 Finding 可直接批准编码。状态：**V1 产品范围已冻结；实现与验收尚未完成。**
 
 本文件是 GrokBuddy V1 产品需求、范围分类及 6.21/6.22 新目标的正式入口。它不声明代码已符合新规则，不授权创建 Task、测试、部署或重启，也不改写任何带日期的 Phase 报告。Hub 仍是 Task、Review、Artifact 和 Audit 的唯一业务事实源。现行实现或旧 Phase 合同与本文件冲突时，应记录 drift，并在后续单独授权的实现工作中对齐；不能以旧 Gate 或当前代码降低 Human 冻结的产品要求。
 
@@ -10,15 +10,15 @@ Human 冻结日期：2026-09-23（Asia/Shanghai）。状态：**V1 产品范围�
 2. WorkBuddy 先出方案，不写代码。
 3. WorkBuddy 通过 webhook 把方案同步给 GrokBot。
 4. GrokBot 第一轮分析方案，返回结论和修改建议。
-5. WorkBuddy 按建议修改方案，再通过 webhook 提交 GrokBot。
-6. GrokBot 第二轮只输出 PASS/BLOCKED；只有方向性、核心需求、安全或数据等实质问题才能 BLOCKED，小问题不得 BLOCKED。
-7. 第二轮方案 PASS 后 WorkBuddy 才编码；BLOCKED 则 WorkBuddy 停止，前端展示方案 V1、Grok R1、方案 V2、Grok R2 BLOCKED 理由，由 Human 决策。
+5. 方案 R1 PASS 且无未关闭实质 Finding 时直接批准编码；R1 NEEDS_CHANGES 或 BLOCK 时，WorkBuddy 按建议修订一次方案，再通过 webhook 提交 GrokBot R2。
+6. 方案 R2 只输出 PASS/BLOCKED；只有方向性、核心需求、安全或数据等实质问题才能 BLOCKED，小问题不得 BLOCKED。
+7. 方案 R1 PASS 或 R2 PASS 后 WorkBuddy 才编码；R2 BLOCKED 则 WorkBuddy 停止，前端展示方案 V1、Grok R1、方案 V2、Grok R2 BLOCKED 理由，由 Human 决策。
 8. WorkBuddy 完成代码 V1 后提交 GrokBot 审核和测试；R1 PASS 则交付；BLOCKED 则给修改意见，WorkBuddy 修改一次再提交。
 9. 第二轮代码审核只允许 PASS/BLOCKED；若 BLOCKED，前端仍展示操作方法、生成文件及 Grok 第二轮阻断理由；不得自动进入第三轮。
 10. 必须有网站 / Control Center，可查看 WorkBuddy 与 GrokBot 的文案、时间、方案、代码、测试结果、生成文件和完整时间线。
 11. WorkBuddy 代码是否上传 GitHub 不属于自动主链，由 Human / ChatGPT 决策。
 
-方案与终审各最多两轮。第一轮可给修改建议；第二轮只接受产品层的 PASS/BLOCKED。这里的 `BLOCKED` 是产品展示与决策语义；现有协议的 `BLOCK`、`NEEDS_CHANGES` 和 Hub Gate 状态如何对应，属于待对齐的实现/合同 drift，不能把当前枚举直接当作 V1 已实现。方案未 PASS 不得编码。终审 PASS 应展示操作方法与文件；终审 R2 BLOCKED 仍须展示产物和理由，并明确未验收通过。Human 对阻断作出的独立决定不得伪装成 GrokBot PASS。
+方案与终审各最多两轮；方案 R1 PASS 可直接批准，R1 需要修订时才进入 R2。第一轮可给修改建议；第二轮只接受产品层的 PASS/BLOCKED。这里的 `BLOCKED` 是产品展示与决策语义，协议值是 `BLOCK`，Hub Gate 状态另行保存。方案未 PASS 不得编码。终审 PASS 应展示操作方法与文件；终审 R2 BLOCKED 仍须展示产物和理由，并明确未验收通过。Human 对阻断作出的独立决定不得伪装成 GrokBot PASS。新 Task 的机器决策规则见 [V1 Review Decision Policy](contracts/V1_REVIEW_DECISION_POLICY.md)；代码和验收状态须以实际证据核对。
 
 ## V1 范围判定
 
@@ -29,9 +29,9 @@ Human 冻结日期：2026-09-23（Asia/Shanghai）。状态：**V1 产品范围�
 | # | 工作项与需求 | 已有实现 / 验证 | 尚缺与阻塞原因 |
 | --- | --- | --- | --- |
 | 1 | 产品合同和双轮语义对齐；需求 2–9 | 本文件冻结产品规则；旧 Phase 6 合同与代码已有方案 2 轮、终审默认 3 轮及 v2 Review 枚举。 | 后续须对齐正式合同、协议映射和实现；目前不能声称双轮产品规则已落地。直接影响方案/终审闸。 |
-| 2 | WorkBuddy 连续执行产品流程；需求 1、2、5、7–9 | ingress、Hub、Worker MCP 已实现；6.20 证明一次正式 Plan→Worker→Final 链。仓内 WorkBuddy skill 目前只负责点火。 | 尚未证明一次普通需求下 WorkBuddy 能按 R1 意见修订、等 R2 PASS 再编码、按终审意见至多修改一次并交付。 |
-| 3 | 方案 R1/R2 决策与阻断展示；需求 3–7 | webhook 唤醒、认证取件/回传已有 Human 实弹复测；Plan 修订与 Human Gate 有实现。 | 尚未证明 R1 建议→方案 V2→R2 仅 PASS/BLOCKED、小问题不 BLOCKED、R2 BLOCKED 停写并展示四份材料。 |
-| 4 | 代码 R1/R2 决策与交付；需求 8–9 | 6.20 证明 Final R1 PASS 可推动 Hub 到 DONE；TEST_RESULT、DIFF、Final Package 可持久化。 | 现行终审默认 3 轮，且现行 `BLOCK` 会直接入 Human Gate；需对齐 R1 修改一次、R2 仅 PASS/BLOCKED、R2 BLOCKED 仍展示方法/文件/理由。 |
+| 2 | WorkBuddy 连续执行产品流程；需求 1、2、5、7–9 | ingress、Hub、Worker MCP 已实现；6.20 证明一次正式 Plan→Worker→Final 链。仓内 WorkBuddy skill 目前只负责点火。 | 尚未证明一次普通需求下 WorkBuddy 能在方案 R1 PASS 后直接编码，或按 R1 意见修订、等 R2 PASS 再编码，并按终审意见至多修改一次后交付。 |
+| 3 | 方案 R1/R2 决策与阻断展示；需求 3–7 | webhook 唤醒、认证取件/回传已有 Human 实弹复测；Plan 修订与 Human Gate 有实现。 | 尚未证明 R1 PASS 直接批准、R1 需修改时方案 V2→R2 仅 PASS/BLOCKED、小问题不 BLOCKED、R2 BLOCKED 停写并展示四份材料。 |
+| 4 | 代码 R1/R2 决策与交付；需求 8–9 | 6.20 证明 Final R1 PASS 可推动 Hub 到 DONE；TEST_RESULT、DIFF、Final Package 可持久化。 | 冻结时的生产实现终审默认 3 轮，且 `BLOCK` 会直接入 Human Gate；须核对新规则的本地实现、正式部署与展示，R2 BLOCKED 仍须展示方法/文件/理由。 |
 | 5 | 网站 / Control Center；需求 7、9、10 | Hub 已保存部分所需数据并提供部分只读查询；仓内尚无完整网站。 | 需要网站及所需读取面，展示双方文案、时间、方案、代码、测试、文件、阻断理由和完整时间线。 |
 
 上述 5 项均阻塞 V1；已有局部实现或历史 PASS 不能代替对应产品行为验收。
@@ -58,8 +58,8 @@ Human 冻结日期：2026-09-23（Asia/Shanghai）。状态：**V1 产品范围�
 
 6.21 验收 11 条需求直接要求的产品行为，而非旧负面故障矩阵：
 
-1. Human 提需求后，WorkBuddy 先出方案且方案 PASS 前不编码；方案通过 webhook 触发真实 GrokBot R1，返回建议，WorkBuddy 修订后再次通过 webhook 提交。
-2. 方案 R2 只给 PASS/BLOCKED；小问题不作为 BLOCKED。PASS 才编码；BLOCKED 停止并向 Human 展示四份指定材料。
+1. Human 提需求后，WorkBuddy 先出方案且方案 PASS 前不编码；方案通过 webhook 触发真实 GrokBot R1。R1 PASS 可直接批准；R1 需修改时 WorkBuddy 修订一次并再次通过 webhook 提交。
+2. 需要方案 R2 时只给 PASS/BLOCKED；小问题不作为 BLOCKED。方案 R1 或 R2 PASS 才编码；R2 BLOCKED 停止并向 Human 展示四份指定材料。
 3. 代码与测试交 GrokBot；Final R1 PASS 交付，或 R1 给修改意见后 WorkBuddy 仅修改一次；Final R2 仅 PASS/BLOCKED。R2 BLOCKED 仍展示操作方法、生成文件、理由及未验收状态，不自动进入 R3。
 4. Control Center 显示需求 10 的全部字段与完整时间线；Hub 记录与展示一致。GitHub 上传保持独立 Human/ChatGPT 决策。
 

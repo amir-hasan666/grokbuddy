@@ -4,6 +4,7 @@ import json
 
 from grokbuddy.domain.model import (HubError, Role, ACTIVE_REQUEST, TERMINAL, Conflict)
 from grokbuddy.domain.rules import aggregate_verdict, finding_transition
+from grokbuddy.domain.review_policy import V1_LIMIT, is_v1_dual_round
 from .common import Services, canonical, digest, uid, audit
 
 
@@ -112,6 +113,8 @@ class EventService(Services):
                                 'profile_sha256', 'input_sha256'):
                         if payload[key] != expected[key]:
                             raise HubError('Result does not match frozen request')
+                    if payload.get('decision_policy_version') != expected.get('decision_policy_version'):
+                        raise HubError('Result decision policy does not match frozen request')
                     if payload['reviewer']['id'] != actor['id'] or payload['reviewer']['type'] != actor['reviewer_type']:
                         raise HubError('Result reviewer declaration mismatch')
                     if (payload['protocol_version'] == 'v2'
@@ -170,8 +173,21 @@ class EventService(Services):
         self.artifact(repo, task['id'], frozen['profile_artifact_id'], frozen['profile_sha256'])
         plan = rr['review_type'] == 'PLAN_REVIEW'
         protocol_v2 = result['protocol_version'] == 'v2'
-        if plan and result['verdict'] == 'PASS' and any(r['blocking'] for r in result['risks']):
-            raise HubError('PLAN PASS conflicts with blocking risks')
+        v1_dual = is_v1_dual_round(task)
+        if v1_dual:
+            if rr['review_round'] > V1_LIMIT:
+                raise HubError('V1 review round exceeds the frozen limit')
+            if rr['review_round'] == 2 and result['verdict'] not in ('PASS', 'BLOCK'):
+                raise HubError('V1 second round accepts only PASS or BLOCK')
+            if any(item['outcome'] == 'ADVISORY' for item in result['verifications']) and rr['review_round'] != 2:
+                raise HubError('Only V1 second round may mark a finding advisory')
+        elif protocol_v2 and any(item['outcome'] == 'ADVISORY' for item in result['verifications']):
+            raise HubError('Advisory verification is outside this Task policy')
+        if protocol_v2 and any(item['outcome'] == 'ADVISORY' for item in result['verifications']):
+            if not result['recommendations']:
+                raise HubError('Advisory finding requires a retained recommendation')
+        if (plan or v1_dual) and result['verdict'] == 'PASS' and any(r['blocking'] for r in result['risks']):
+            raise HubError('PASS conflicts with blocking risks')
         if not plan:
             self.ensure_actions_closed(repo, task)
             if not task.get('self_test_passed') or task['current_final_id'] != rr['input_artifact_id']:
@@ -193,12 +209,19 @@ class EventService(Services):
             relevant = projected if not plan else [
                 finding for finding in projected if finding.get('review_type') == 'PLAN_REVIEW']
             unresolved = [finding for finding in relevant
-                          if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')]
+                          if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')
+                          and not finding.get('advisory', False)]
             if result['verdict'] == 'PASS' and unresolved:
                 raise HubError('PASS cannot leave actionable findings unresolved')
             actionable_after = {finding['id'] for finding in unresolved}
             if result['verdict'] == 'NEEDS_CHANGES' and not set(actionable_ids).intersection(actionable_after):
                 raise HubError('NEEDS_CHANGES requires an actionable finding')
+            if v1_dual and rr['review_round'] == 1 and result['verdict'] == 'BLOCK' and not actionable_after:
+                raise HubError('V1 first-round BLOCK requires an actionable finding')
+            if v1_dual and rr['review_round'] == 2 and result['verdict'] == 'BLOCK':
+                if not any(finding['blocking'] and finding['severity'] in ('HIGH', 'CRITICAL')
+                           for finding in unresolved):
+                    raise HubError('V1 second-round BLOCK requires a substantive unresolved finding')
             review['effective_verdict'] = aggregate_verdict(relevant, result['verdict'])
             snapshot = deepcopy(result)
             for item, finding_id, _ in prepared:
@@ -237,7 +260,8 @@ class EventService(Services):
             if protocol_v2:
                 task.update(automation_frozen=False, gate_reason=None, pending_revision_kind=None)
             action = 'plan_pass' if plan else 'final_pass'
-        elif protocol_v2 and (verdict == 'BLOCK' or rr['review_round'] >= rr['round_limit']):
+        elif protocol_v2 and ((not v1_dual and verdict == 'BLOCK')
+                              or rr['review_round'] >= rr['round_limit']):
             task['gate_reason'] = 'ROUND_LIMIT' if rr['review_round'] >= rr['round_limit'] else 'REVIEW_BLOCK'
             task['automation_frozen'] = True
             action = 'plan_human_review' if plan else 'final_human_review'
@@ -249,7 +273,8 @@ class EventService(Services):
                 task['pending_revision_kind'] = rr['review_type']
                 if not plan:
                     task['final_fix_finding_ids'] = [finding['id'] for finding in projected
-                                                     if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')]
+                                                     if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')
+                                                     and not finding.get('advisory', False)]
                 action = 'plan_changes' if plan else 'final_changes'
             else:
                 action = ('plan_' if plan else 'final_') + ('block' if verdict == 'BLOCK' else 'changes')
@@ -283,7 +308,7 @@ class EventService(Services):
                 if (finding['task_id'] != task['id'] or finding_id not in frozen
                         or finding['version'] != frozen[finding_id]['version']):
                     raise Conflict('Referenced finding is outside the frozen Review scope')
-                if finding['status'] in ('VERIFIED', 'WAIVED_BY_HUMAN'):
+                if finding['status'] in ('VERIFIED', 'WAIVED_BY_HUMAN') or finding.get('advisory', False):
                     raise HubError('Closed finding is not actionable')
                 if finding['external_finding_key'] != item['external_finding_key']:
                     raise HubError('Finding reference identity mismatch')
@@ -297,7 +322,8 @@ class EventService(Services):
             prepared.append((item, finding_id, is_new))
             actionable_ids.append(finding_id)
         projected = repo.find('review_findings', task_id=task['id'])
-        status_by_id = {item['finding_id']: ('VERIFIED' if item['outcome'] == 'VERIFIED' else 'OPEN')
+        status_by_id = {item['finding_id']: ('VERIFIED' if item['outcome'] == 'VERIFIED'
+                                             else 'OPEN' if item['outcome'] == 'REOPENED' else None)
                         for item in result['verifications']}
         for item in result['verifications']:
             self.artifact(repo, task['id'], item['evidence']['artifact_id'])
@@ -305,8 +331,22 @@ class EventService(Services):
             if (finding['task_id'] != task['id'] or item['finding_id'] not in frozen
                     or finding['version'] != frozen[item['finding_id']]['version']):
                 raise Conflict('Finding changed during evaluation')
-            finding_transition(finding['status'], 'verify' if item['outcome'] == 'VERIFIED' else 'reopen', Role.REVIEWER)
-        projected = [{**finding, 'status': status_by_id.get(finding['id'], finding['status'])}
+            if item['outcome'] == 'ADVISORY':
+                if finding['severity'] != 'LOW' or finding.get('review_type') != rr['review_type']:
+                    raise HubError('Only a same-stage LOW finding may become advisory')
+                if finding['status'] in ('VERIFIED', 'WAIVED_BY_HUMAN') or finding.get('advisory', False):
+                    raise HubError('Closed or advisory finding cannot become advisory again')
+            else:
+                action = 'verify' if item['outcome'] == 'VERIFIED' else 'reopen'
+                finding_transition(finding['status'], action, Role.REVIEWER)
+        projected = [{**finding,
+                      'status': status_by_id.get(finding['id']) or finding['status'],
+                      'advisory': finding.get('advisory', False) or
+                          any(item['finding_id'] == finding['id'] and item['outcome'] == 'ADVISORY'
+                              for item in result['verifications']),
+                      'actionable': False if any(
+                          item['finding_id'] == finding['id'] and item['outcome'] == 'ADVISORY'
+                          for item in result['verifications']) else finding.get('actionable', True)}
                      for finding in projected]
         for item, finding_id, is_new in prepared:
             if is_new:
@@ -335,15 +375,22 @@ class EventService(Services):
         for item in result['verifications']:
             finding = repo.get('review_findings', item['finding_id'])
             old = finding['status']
-            finding['status'] = 'VERIFIED' if item['outcome'] == 'VERIFIED' else 'OPEN'
+            was_actionable = finding.get('actionable', True)
+            if item['outcome'] == 'ADVISORY':
+                finding['advisory'] = True
+                finding['actionable'] = False
+            else:
+                finding['status'] = 'VERIFIED' if item['outcome'] == 'VERIFIED' else 'OPEN'
             finding['version'] += 1
             finding['updated_at'] = self.clock.now()
             repo.save('review_findings', finding)
             repo.add('finding_events', dict(id=uid('EVT'), finding_id=finding['id'], task_id=task['id'],
                      old_status=old, new_status=finding['status'], review_id=rr['review_id'],
+                     outcome=item['outcome'], advisory=finding.get('advisory', False),
+                     old_actionable=was_actionable, new_actionable=finding.get('actionable', True),
                      actor_id=actor['id'], evidence=item['evidence'], reason=item['reason'],
                      at=self.clock.now()))
-            audit(repo, self.clock, actor, 'FINDING_' + finding['status'], task['id'],
+            audit(repo, self.clock, actor, 'FINDING_' + item['outcome'], task['id'],
                   request_id=rr['id'], finding_id=finding['id'])
 
     def _ensure_projection_intent(self, repo, task, rr, review):

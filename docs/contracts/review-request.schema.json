@@ -33,6 +33,9 @@
       "type": "integer",
       "minimum": 0
     },
+    "decision_policy_version": {
+      "const": "grokbuddy-v1-dual-round"
+    },
     "review_profile": {
       "$ref": "urn:collab:common:v1#/$defs/profile"
     },

@@ -408,7 +408,7 @@
       "type": "object",
       "properties": {
         "finding_id": {"$ref": "urn:collab:common:v1#/$defs/FND"},
-        "outcome": {"enum": ["VERIFIED", "REOPENED"]},
+        "outcome": {"enum": ["VERIFIED", "REOPENED", "ADVISORY"]},
         "evidence": {"$ref": "urn:collab:common:v1#/$defs/evidence"},
         "reason": {"type": "string", "minLength": 1, "maxLength": 4000}
       },
@@ -426,6 +426,8 @@
         "review_round": {"type": "integer", "minimum": 1},
         "content_revision": {"type": "integer", "minimum": 1},
         "expected_task_version": {"type": "integer", "minimum": 0},
+        "decision_policy_version": {"const": "grokbuddy-v1-dual-round"},
+        "blocker_category": {"enum": ["DIRECTION", "CORE_REQUIREMENT", "SECURITY", "DATA"]},
         "review_profile": {"$ref": "urn:collab:common:v1#/$defs/profile"},
         "review_profile_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+$"},
         "profile_sha256": {"$ref": "urn:collab:common:v1#/$defs/hash"},
@@ -492,6 +494,34 @@
         {
           "if": {"properties": {"verdict": {"const": "NEEDS_CHANGES"}}, "required": ["verdict"]},
           "then": {"properties": {"findings": {"minItems": 1}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "decision_policy_version": {"const": "grokbuddy-v1-dual-round"},
+              "review_round": {"const": 1},
+              "verdict": {"const": "BLOCK"}
+            },
+            "required": ["decision_policy_version", "review_round", "verdict"]
+          },
+          "then": {"properties": {"findings": {"minItems": 1}}}
+        },
+        {
+          "if": {
+            "properties": {
+              "decision_policy_version": {"const": "grokbuddy-v1-dual-round"},
+              "review_round": {"const": 2}
+            },
+            "required": ["decision_policy_version", "review_round"]
+          },
+          "then": {
+            "properties": {"verdict": {"enum": ["PASS", "BLOCK"]}},
+            "allOf": [{
+              "if": {"properties": {"verdict": {"const": "BLOCK"}}, "required": ["verdict"]},
+              "then": {"required": ["blocker_category"],
+                       "properties": {"evidence": {"minItems": 1}}}
+            }]
+          }
         }
       ]
     }

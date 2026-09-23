@@ -53,6 +53,13 @@ if ($null -ne $config.PSObject.Properties['supervisorEnabled']) {
     }
     $supervisorEnabled = [bool]$config.supervisorEnabled
 }
+$controlCenterEnabled = $false
+if ($null -ne $config.PSObject.Properties['controlCenterEnabled']) {
+    if ($config.controlCenterEnabled -isnot [bool]) {
+        throw 'controlCenterEnabled must be a boolean.'
+    }
+    $controlCenterEnabled = [bool]$config.controlCenterEnabled
+}
 $supervisorIntervalSeconds = if ($null -ne $config.PSObject.Properties['supervisorIntervalSeconds']) {
     [double]$config.supervisorIntervalSeconds
 }
@@ -159,6 +166,9 @@ $credentialMappings = [ordered]@{
 if ($supervisorEnabled) {
     $credentialMappings['GrokBuddy/GITHUB_COMMENT_TOKEN'] = $githubCommentTokenEnv
 }
+if ($controlCenterEnabled) {
+    $credentialMappings['GrokBuddy/GROKBUDDY_CONTROL_READ_TOKEN'] = 'GROKBUDDY_CONTROL_READ_TOKEN'
+}
 if ($reviewerWakeEnabled) {
     $credentialMappings['GrokBuddy/REVIEWER_WAKE_WEBHOOK_URL'] = $reviewerWakeWebhookUrlEnv
     $credentialMappings['GrokBuddy/REVIEWER_WAKE_WEBHOOK_KEY'] = $reviewerWakeWebhookKeyEnv
@@ -167,7 +177,10 @@ foreach ($target in $credentialMappings.Keys) {
     $credential = $null
     try {
         $credential = Get-GrokBuddyCredential -Target $target
-        $minimumBytes = if ($target -eq 'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY') { 32 } else { 1 }
+        $minimumBytes = if ($target -in @(
+            'GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY',
+            'GrokBuddy/GROKBUDDY_CONTROL_READ_TOKEN'
+        )) { 32 } else { 1 }
         Set-ProcessSecret -Name $credentialMappings[$target] -Value $credential -MinimumUtf8Bytes $minimumBytes
         Add-Content -LiteralPath $credentialLog -Value "$(Get-Date -Format o) PRESENT: $target" -Encoding UTF8
     }
@@ -232,6 +245,9 @@ $arguments = @(
 )
 if (-not $supervisorEnabled) {
     $arguments += '--disable-supervisor'
+}
+if ($controlCenterEnabled) {
+    $arguments += @('--control-token-env', 'GROKBUDDY_CONTROL_READ_TOKEN')
 }
 if ($reviewerWakeEnabled) {
     $arguments += @(

@@ -12,6 +12,7 @@ import anyio
 from mcp.server.transport_security import TransportSecuritySettings
 
 from grokbuddy.domain.model import HubError
+from .control_center import ControlCenterApplication
 from .github import GitHubWebhookApplication, MAX_WEBHOOK_BODY
 from .remote_mcp import create_remote_mcp_server
 
@@ -157,11 +158,13 @@ class CompositeApplication:
     """Route exact Phase 4 paths while preserving the original webhook WSGI app."""
 
     def __init__(self, webhook_app, mcp_app, mcp_token, grok_reviewer_app=None,
-                 readiness_check=None, supervisor_readiness_check=None):
+                 readiness_check=None, supervisor_readiness_check=None,
+                 control_center_app=None):
         self.webhook_app = OriginalWebhookASGIBridge(webhook_app)
         self.mcp_app = mcp_app
         self.authenticated_mcp_app = BearerTokenBoundary(mcp_app, mcp_token)
         self.grok_reviewer_app = grok_reviewer_app
+        self.control_center_app = control_center_app
         self.readiness_check = readiness_check
         self.supervisor_readiness_check = supervisor_readiness_check
 
@@ -222,6 +225,9 @@ class CompositeApplication:
         if path == "/mcp":
             await self.authenticated_mcp_app(scope, receive, send)
             return
+        if (path == "/control" or path.startswith("/control/")) and self.control_center_app is not None:
+            await self.control_center_app(scope, receive, send)
+            return
         if path.startswith('/reviewer/') and self.grok_reviewer_app is not None:
             await self.grok_reviewer_app(scope, receive, send)
             return
@@ -240,6 +246,8 @@ def create_composite_application(
     actor_id="builder",
     grok_reviewer_app=None,
     supervisor_readiness_check=None,
+    control_token=None,
+    control_reviewer_actor_id="grok-reviewer-b",
 ):
     if not isinstance(webhook_secret, str) or not webhook_secret:
         raise HubError("GITHUB_WEBHOOK_SECRET must be set and non-empty")
@@ -274,6 +282,9 @@ def create_composite_application(
         grok_reviewer_app,
         database_ready,
         supervisor_readiness_check,
+        (ControlCenterApplication(runtime, control_token,
+                                  reviewer_actor_id=control_reviewer_actor_id)
+         if control_token is not None else None),
     )
     application.remote_server = remote_server
     return application

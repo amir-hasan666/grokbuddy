@@ -12,7 +12,9 @@ Hub 在首次有效 FINAL ReviewCompleted 事务内生成 `FND-<UUIDv4>`。Revie
 | FIXED / REJECTED_WITH_EVIDENCE | reject verification / Reviewer | OPEN；附反证 |
 | OPEN / ACCEPTED / FIXED / REJECTED_WITH_EVIDENCE | waive / Human | WAIVED_BY_HUMAN；独立授权、原因、风险范围 |
 
-仅 VERIFIED、WAIVED_BY_HUMAN 是关闭态。Builder 不可自行 VERIFIED，Reviewer 不可 waive。关闭后若在新版本发现回归，创建新 finding_id 并以 parent_finding_id 关联原问题，保留原验证历史。
+旧 Task 仅 VERIFIED、WAIVED_BY_HUMAN 是关闭态。Builder 不可自行 VERIFIED，Reviewer 不可 waive。关闭后若在新版本发现回归，创建新 finding_id 并以 parent_finding_id 关联原问题，保留原验证历史。
+
+V1 双轮策略增加 `advisory=true`、`actionable=false` 当前标记：仅第二轮 Reviewer 可把已有 LOW Finding 凭证据、理由和保留建议转为非阻断建议；原 status 不改为 VERIFIED 或 WAIVED。原 Finding 与追加事件保留，并在 V1 verdict 聚合与可执行 Finding 查询中排除。旧 Task 不能产生这个标记。见 [V1 双轮决策合同](contracts/V1_REVIEW_DECISION_POLICY.md)。
 
 重复出现同一问题：Reviewer 引用原 finding_id，更新通过 finding_events 记录观察，不另建重复主键。新问题用新 external key，Hub 分配新 ID。`supersedes=old_finding_id` 表示取代关系；`parent_finding_id` 表示拆分/衍生关系；两者须同任务、无自引用/环。**建立关系不自动关闭旧 Finding**，旧问题仍需 Reviewer VERIFIED 或 Human WAIVED。
 

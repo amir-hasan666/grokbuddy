@@ -1,5 +1,7 @@
 # Verdict Aggregation v1
 
+本文件是旧 Task 的聚合规则。带 `grokbuddy-v1-dual-round` 冻结策略的新 Task 还须遵守 [V1 双轮决策合同](contracts/V1_REVIEW_DECISION_POLICY.md)：R2 仅 PASS/BLOCK；LOW 问题只有经 Reviewer 明确转 ADVISORY 并留痕后才不阻断 PASS；R2 语义不自洽的 PASS 拒绝 APPLY，不降为 NEEDS_CHANGES。
+
 输入是任务截至本次有效 FINAL 结果的**全部** Finding 当前状态（本轮 new findings + 本轮有效 verification + 既有历史未关闭项），不能只统计本次 JSON 的 findings 数组。
 
 `closed = status in {VERIFIED, WAIVED_BY_HUMAN}`。按以下顺序聚合：

@@ -1,6 +1,7 @@
 from grokbuddy.domain.model import HubError, PermissionDenied, Role, ReviewType
 from .common import Services, uid, canonical, audit, iso, digest
 from .grok_routing import select_review_delivery_channel
+from grokbuddy.domain.review_policy import is_v1_dual_round
 
 
 class ReviewService(Services):
@@ -66,12 +67,15 @@ class ReviewService(Services):
             if protocol_version == 'v2':
                 # request_plan/request_final is the only Task mutation below.
                 envelope['expected_task_version'] = task['version'] + 1
+                if is_v1_dual_round(task):
+                    envelope['decision_policy_version'] = task['decision_policy_version']
             self.contracts.validate('request', envelope)
             request = dict(id=request_id, task_id=task_id, review_id=review_id, review_type=kind.value,
                            review_round=round_number, status='PENDING', input_artifact_id=artifact_id,
                            created_at=self.clock.now(), deadline_at=deadline, envelope=envelope,
                            context_artifact_id=context['id'], round_limit=limit,
                            protocol_version=protocol_version,
+                           decision_policy_version=task.get('decision_policy_version'),
                            delivery_channel=delivery_channel,
                            expected_task_version=envelope.get('expected_task_version'))
             repo.add('review_requests', request)

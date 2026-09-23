@@ -23,6 +23,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "grokbuddy.adapters" = ["schema.sql"]
+"grokbuddy.interfaces" = ["control_center_static/*.html", "control_center_static/*.js", "control_center_static/*.css"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -77,6 +77,8 @@ class MockReviewerAdapter:
         result = {k: request[k] for k in fields}
         if request['protocol_version'] == 'v2':
             result['expected_task_version'] = request['expected_task_version']
+            if 'decision_policy_version' in request:
+                result['decision_policy_version'] = request['decision_policy_version']
         result.update(verdict=verdict, summary='Local Mock evaluation: ' + scenario,
                       reviewer={'type': 'mock', 'id': request['expected_reviewer_actor_id']},
                       timestamp=self.timestamp(self.clock.now()))
@@ -105,6 +107,9 @@ class MockReviewerAdapter:
                      'scope': {'files': ['local.txt']}, 'rationale': 'Resolve the mock finding'}],
                 findings=deepcopy(findings),
                 verifications=deepcopy(spec.get('verifications') or []))
+            if (request.get('decision_policy_version') == 'grokbuddy-v1-dual-round'
+                    and request['review_round'] == 2 and verdict == 'BLOCK'):
+                result['blocker_category'] = 'CORE_REQUIREMENT'
         elif request['review_type'] == 'PLAN_REVIEW':
             result.update(comments=[], suggestions=[], risks=[] if verdict == 'PASS' else [
                 {'code': 'EVIDENCE_INSUFFICIENT', 'description': 'Mock requests more evidence', 'blocking': True}])

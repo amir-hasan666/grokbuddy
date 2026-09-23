@@ -1,5 +1,6 @@
 {
   "contractsDir": "docs/contracts",
+  "controlCenterEnabled": false,
   "githubCommentTokenEnv": "GITHUB_COMMENT_TOKEN",
   "host": "127.0.0.1",
   "port": 8788,

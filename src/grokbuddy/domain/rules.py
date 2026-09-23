@@ -72,7 +72,8 @@ def finding_transition(state: str, action: str, role: str) -> str:
 
 
 def aggregate_verdict(findings: list[dict], reported: str) -> str:
-    unresolved = [f for f in findings if f['status'] not in CLOSED_FINDING]
+    unresolved = [f for f in findings if f['status'] not in CLOSED_FINDING
+                  and not f.get('advisory', False)]
     calculated = (Verdict.BLOCK if any(f['severity'] == 'CRITICAL' for f in unresolved)
                   else Verdict.NEEDS_CHANGES if unresolved else Verdict.PASS)
     rank = {Verdict.PASS: 0, Verdict.NEEDS_CHANGES: 1, Verdict.BLOCK: 2}
