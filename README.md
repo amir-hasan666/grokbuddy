@@ -4,7 +4,7 @@ Collaboration Hub 是一个长期可维护、可审计的多主体协作控制�
 
 ## Current status
 
-见 [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md)。
+V1 的 11 条冻结需求、5 个 blocker、6 个 V1.1 reliability backlog 与 6.21/6.22 新定义见 [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md)。当前生产事实、历史 Gate 结果见 [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md)。文档范围重定义不代表产品实现或验收 PASS。
 
 ## 核心边界
 
@@ -33,6 +33,7 @@ flowchart LR
 | 入口 | 说明 |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | 长期控制面、安全边界与工作规则 |
+| [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md) | Human 冻结的 11 条产品需求、当前 blocker/backlog 和 6.21/6.22 新 Exit Gate |
 | [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md) | 可变的当前阶段、正式生产入口、部署事实、开放门禁与证据指针 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 分层、事务与 adapter 边界 |
 | [DATA_MODEL.md](DATA_MODEL.md) | 逻辑数据模型、键与约束 |
@@ -45,7 +46,7 @@ flowchart LR
 | [service config](config/grokbuddy.service.json) | 正式 runtime 配置；具体值由当前基线解释 |
 | [Capability Verification](docs/CAPABILITY_VERIFICATION.md) | 官方能力、本地观察与当前账号实测的证据边界 |
 
-`src/grokbuddy/` 按 domain、application、ports/adapters、infrastructure 与 interfaces 分层；`tests/` 保存本地自动化验证；`scripts/` 包含开发、验证与运维入口；`skills/` 保存仓库工作流。`docs/PHASE*.md` 等带日期报告是 historical/locked evidence，只描述当时环境和结果，不是当前运行指南。
+`src/grokbuddy/` 按 domain、application、ports/adapters、infrastructure 与 interfaces 分层；`tests/` 保存本地自动化验证；`scripts/` 包含开发、验证与运维入口；`skills/` 保存仓库工作流。带日期的 Phase 报告是 historical/locked evidence，只描述当时环境和结果，不是当前 V1 Exit Gate；现行运维步骤仍以运行手册为准。旧 6.21 A–I 负面矩阵不再阻塞 V1；可靠性后续项见产品文档。
 
 ## 本地开发与验证
 

@@ -1,6 +1,6 @@
 # Current Production Baseline
 
-Last updated: 2026-09-22 18:44 Asia/Shanghai
+Last updated: 2026-09-23 Asia/Shanghai (documentation scope reset; no runtime change)
 
 This file is a mutable pointer to the current production baseline.
 It is not historical evidence and must not rewrite or supersede the
@@ -9,8 +9,10 @@ recorded facts in dated Phase reports.
 ## Current stage
 
 - Phase 6 is in progress.
+- [GrokBuddy V1 Product Path and Scope Reset](PRODUCT_PATH_V1.md) is the Human-frozen V1 product scope and current Exit Gate definition: 11 requirements, 5 V1 blockers, 6 V1.1 reliability backlog items. This documentation update does not close any implementation or acceptance gate.
 - [Phase 6 Step 6.20 Real Final E2E](PHASE6_STEP6_20_REAL_FINAL_E2E_REPORT.md) is `PHASE6-STEP6.20-REAL-FINAL-E2E: PASS` for the core Hub business path. Its GitHub projection is honestly `UNKNOWN` and is non-blocking for the Hub verdict.
-- This does not declare all of Phase 6 complete. Phase 6.21/6.22 remain open unless and until their own authorized work and evidence reports close them.
+- The old [6.21 Negative E2E report](PHASE6_STEP6_21_NEGATIVE_E2E_REPORT.md) remains historical `IN PROGRESS / PARTIAL / BLOCKED`; its A–I matrix is no longer the V1 Exit Gate. New 6.21 means V1 product workflow acceptance; new 6.22 means V1 practical usability acceptance. Both remain open and have not been run under the new definitions.
+- Same-RR re-wake remains `IMPLEMENTED + LOCAL REGRESSION PASS / NOT PRODUCTION VALIDATED` and is V1.1 reliability backlog, not a V1 blocker absent proof that normal webhook flow requires it.
 
 ## Closed gates
 
@@ -68,15 +70,15 @@ Formal Phase 6.20 evidence requires Manual Glue = 0 as defined by the frozen [Ma
 
 When sources appear to conflict, use this order:
 
-1. Frozen current production contract and `docs/contracts/`.
-2. `config/grokbuddy.service.json` and other formal runtime configuration.
-3. `docs/CURRENT_PRODUCTION_BASELINE.md` as the current Gate/deployment-fact pointer.
-4. Current implementation code, which must conform to the preceding contract and configuration; conflict is an **implementation defect**.
-5. Dated Phase reports as historical/locked evidence.
-6. Root `AGENTS.md` and `README.md` as long-term rules and navigation; they do not maintain phase status.
+1. [PRODUCT_PATH_V1.md](PRODUCT_PATH_V1.md) for Human-frozen V1 product scope and new 6.21/6.22 Exit Gate; existing `docs/contracts/` remain the machine protocol authority for the currently deployed implementation until separately aligned.
+2. `config/grokbuddy.service.json` and other formal runtime configuration for actual deployment facts.
+3. `docs/CURRENT_PRODUCTION_BASELINE.md` for current stage, Gate and deployment-fact pointers.
+4. Current implementation code, which must be compared with product scope and applicable protocol; mismatches are drift, not grounds to weaken V1.
+5. Dated Phase reports as historical/locked evidence; old Gate definitions do not override the newly frozen V1 scope.
+6. Root `AGENTS.md` and `README.md` as long-term rules and navigation.
 7. Legacy and older-phase material.
 
-> 代码与现行 contract 冲突时，不得以「代码是当前实现」为由修改 contract 迁就代码；应报告 implementation/contract drift。
+> V1 产品范围、现行机器合同与实现冲突时，应分别报告 product/contract/implementation drift；不能用旧合同或当前代码降低 Human 冻结的产品要求，也不能把文档 Scope Reset 冒充已部署实现。
 
 ## Current Phase 6.20 status and evidence pointer
 
@@ -91,10 +93,6 @@ The dated [Phase 6 Step 6.20 Real Final E2E Report](PHASE6_STEP6_20_REAL_FINAL_E
 
 The earlier [MCP submit-plan scope report](PHASE6_MCP_SUBMIT_PLAN_SCOPE_FIX_REPORT.md), [Supervisor production wiring report](PHASE6_SUPERVISOR_PRODUCTION_WIRING_REPORT.md), and [Reviewer Delivery Gap Report](PHASE6_REVIEWER_DELIVERY_GAP_REPORT.md) retain their point-in-time `LOCAL PASS / WAITING ...` conclusions as historical evidence. This baseline does not rewrite those reports; the later 6.20 report records the subsequently completed production path.
 
-Optional follow-up work, separate from the 6.20 core PASS:
-
-- add a verified webhook-based automatic wake for Reviewer intake while preserving controlled polling, durable ACK and deduplication semantics;
-- improve the operations documentation for lease/fencing and uncertain-receipt reconciliation;
-- leave the no-binding GitHub projection `UNKNOWN` unless a real binding is produced through the governed workflow.
+The 6.20 report listed webhook wake as optional at that time. The later [Reviewer Webhook Wake Report](PHASE6_REVIEWER_WEBHOOK_WAKE_REPORT.md) records its own `HUMAN RETEST PASS`; it does not change 6.20 evidence. Same-RR recovery and other fault-path follow-ups are now prioritized under [PRODUCT_PATH_V1.md](PRODUCT_PATH_V1.md). The 6.20 Task's no-binding GitHub projection remains `UNKNOWN` and is not a V1 Exit Gate.
 
 The [Control Plane Detemporalize Report](PHASE6_CONTROL_PLANE_DETEMPORALIZE_REPORT.md) remains `PHASE6-CONTROL-PLANE-DETEMPORALIZE: LOCAL PASS / DOCS ONLY`. It explains the mutable-baseline design and is separate from the 6.20 production E2E evidence.
