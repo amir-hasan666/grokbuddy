@@ -23,3 +23,8 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f0f3f6; paddi
 .artifact button { padding: .22rem .5rem; }
 .artifact a { color: #16547b; }
 #error { color: #a62c2c; }
+#error:not(:empty) { background: #fff4f1; border-left: .35rem solid #b23a34; padding: .7rem; }
+#task-detail.loading { background: #eef6fb; border-left: .35rem solid #16547b; }
+#task-detail.loaded { background: #f3fbf6; border-left: .35rem solid #1b7d50; }
+.loading-status { color: #164d73; font-weight: 700; }
+.success-status { color: #17623f; font-weight: 700; }

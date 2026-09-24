@@ -2,6 +2,7 @@
 const listRoot = document.getElementById("task-list");
 const detailRoot = document.getElementById("task-detail");
 const errorRoot = document.getElementById("error");
+let selectedTaskRequest = 0;
 
 function el(tag, value, klass) {
   const node = document.createElement(tag);
@@ -23,6 +24,11 @@ async function api(path) {
   const response = await fetch(path, {cache: "no-store", credentials: "same-origin"});
   if (!response.ok) throw new Error("Hub 读取失败：" + response.status);
   return response.json();
+}
+function focusOn(node) {
+  if (node && typeof node.scrollIntoView === "function") {
+    node.scrollIntoView({behavior: "auto", block: "start"});
+  }
 }
 function missing(parent, name) { add(parent, "p", name + "：Hub 未留存", "muted"); }
 function artifact(parent, taskId, item, label) {
@@ -114,11 +120,32 @@ async function timeline(parent, taskId, visibleArtifacts) {
   await load();
 }
 async function showTask(taskId) {
+  const request = ++selectedTaskRequest;
   errorRoot.textContent = "";
-  const data = await api("/control/api/tasks/" + encodeURIComponent(taskId));
+  detailRoot.classList.remove("loaded");
+  detailRoot.classList.add("loading");
+  detailRoot.replaceChildren();
+  add(detailRoot, "h2", "Task 详情");
+  add(detailRoot, "p", "正在加载 Task 详情…", "loading-status");
+  focusOn(detailRoot);
+  let data;
+  try {
+    data = await api("/control/api/tasks/" + encodeURIComponent(taskId));
+  } catch (e) {
+    if (request !== selectedTaskRequest) return;
+    detailRoot.classList.remove("loading");
+    detailRoot.replaceChildren();
+    errorRoot.textContent = "读取失败：" + e.message;
+    focusOn(errorRoot);
+    return;
+  }
+  if (request !== selectedTaskRequest) return;
+  detailRoot.classList.remove("loading");
+  detailRoot.classList.add("loaded");
   detailRoot.replaceChildren();
   const task = data.task;
-  add(detailRoot, "h2", task.id);
+  add(detailRoot, "h2", "Task 详情 · " + task.id);
+  add(detailRoot, "p", "已加载 Task 详情", "success-status");
   add(detailRoot, "p", "Hub 状态：" + task.state + " · 创建：" + when(task.created_at));
   if (task.completion_basis) add(detailRoot, "p",
       task.completion_basis === "HUMAN_OVERRIDE" ?
@@ -189,7 +216,14 @@ async function showTask(taskId) {
     for (const file of item.generated_files) remember(file.artifact);
   }
   for (const item of data.human_decisions) remember(item.reason);
-  await timeline(add(detailRoot, "section"), taskId, visible);
+  focusOn(detailRoot);
+  try {
+    await timeline(add(detailRoot, "section"), taskId, visible);
+  } catch (e) {
+    if (request === selectedTaskRequest) {
+      add(detailRoot, "p", "时间线读取失败：" + e.message, "warning");
+    }
+  }
 }
 async function loadList() {
   const data = await api("/control/api/tasks");
