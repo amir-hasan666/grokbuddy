@@ -1,0 +1,34 @@
+{
+  "protocol_version": "v2",
+  "task_id": "TASK-10000000-0000-4000-8000-000000000002",
+  "review_request_id": "RR-20000000-0000-4000-8000-000000000002",
+  "review_id": "REV-30000000-0000-4000-8000-000000000002",
+  "review_type": "FINAL_REVIEW",
+  "review_round": 2,
+  "content_revision": 4,
+  "expected_task_version": 12,
+  "decision_policy_version": "grokbuddy-v1-dual-round",
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "verdict": "PASS",
+  "summary": "The bounded Final package passes review.",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-21T08:05:00Z",
+  "evidence": [
+    {
+      "artifact_id": "ART-40000000-0000-4000-8000-000000000002",
+      "locator": "final-package",
+      "description": "The frozen Final package and test evidence."
+    }
+  ],
+  "risks": [],
+  "recommendations": [],
+  "proposed_changes": [],
+  "findings": [],
+  "verifications": []
+}

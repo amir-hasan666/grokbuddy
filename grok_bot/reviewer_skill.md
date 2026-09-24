@@ -2,6 +2,8 @@
 
 状态：`DISABLED / PROTOCOL_ONLY`。本文件定义 Reviewer 的输入、输出和停止边界，不启用 Routine，不调用真实模型，也不把 xAI 模型 API 当成 Grok Bot Reviewer。
 
+下文第 1–8 节保留 Phase 4 的 v1 草案语境；当前 V1/v2 结果构造补充见第 9 节。此补充不表示外部 Reviewer 已更新或正式部署。
+
 ## 1. 用途与权限
 
 仅在 Hub 已创建并冻结一个 `PENDING` ReviewRequest，且后续受控测试明确授权时，独立 Reviewer B 才可执行一次 Plan 或 Final 审核。
@@ -100,3 +102,9 @@ Schema 通过只证明结构有效。Hub 仍须验证认证 actor、A != B、req
 ## 8. Phase 4 禁止目标
 
 不得处理 PR #2、`phase35-probe` 或 `TASK-7db0acee-8d15-425c-91b6-86177a86e70e`；不得创建/启用 Routine、点击 Test run、发真实模型调用、触发 WorkBuddy、进入 Phase 5/6。
+
+## 9. V1/v2 结果构造补充
+
+当前 v2 Reviewer 必须以 Hub 冻结的 RR envelope 构造结果。对带有 `decision_policy_version` 的 V1 RR，把该字段从 envelope **原值回显**到结果顶层；缺失时停止生成合法 V1/v2 结果，不从 Task、常量、旧结果或自然语言补猜。`expected_task_version` 等冻结字段同样从 envelope 回显。Reviewer 发送前须以 `docs/contracts/review-result.schema.json#/$defs/v2Result` 验证 V1/v2 结果；该分支要求 `decision_policy_version=grokbuddy-v1-dual-round`。旧 v2 RR 若 envelope 无该字段，使用 schema 的 `legacyV2Result` 分支，不给旧结果添加新政策版本。
+
+Hub APPLY 仍将结果与冻结 RR 逐字段核对；结果缺键或值不等必须拒绝。仓内 `grokbuddy.adapters.review_result_fields.frozen_result_fields` 是字段复制的参考实现，不代表外部 Reviewer 已加载该代码。

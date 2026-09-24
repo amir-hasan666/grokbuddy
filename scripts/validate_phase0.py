@@ -87,6 +87,9 @@ def validate_contracts() -> None:
         (s['$id'], Resource.from_contents(s)) for s in schemas.values())
     validators = {k: Draft202012Validator(v, registry=registry, format_checker=FormatChecker())
                   for k, v in schemas.items()}
+    v1_result_validator = Draft202012Validator(
+        {'$ref': 'urn:collab:result:v1#/$defs/v2Result'},
+        registry=registry, format_checker=FormatChecker())
     fixtures = {}
     for path in sorted((CONTRACTS / 'examples').glob('*.json')):
         data = json.loads(path.read_text(encoding='utf-8'))
@@ -96,6 +99,8 @@ def validate_contracts() -> None:
         fixtures[path.stem] = (data, validator)
         errors = list(validator.iter_errors(data))
         check('positive:' + path.stem, not errors, '; '.join(e.message for e in errors))
+        if path.stem.startswith('v1-policy-'):
+            check('positive-v1-branch:' + path.stem, v1_result_validator.is_valid(data))
         # Exercise the published required-field contract, including oneOf branches.
         optional = {'commit_sha', 'diff_artifact'} if kind == 'final-package' else set()
         for field in data:
@@ -103,7 +108,10 @@ def validate_contracts() -> None:
                 continue
             candidate = copy.deepcopy(data)
             del candidate[field]
-            check('missing:' + path.stem + ':' + field, not validator.is_valid(candidate))
+            branch_validator = (v1_result_validator
+                                if path.stem.startswith('v1-policy-') else validator)
+            check('missing:' + path.stem + ':' + field,
+                  not branch_validator.is_valid(candidate))
         candidate = copy.deepcopy(data)
         candidate['unexpected_field'] = 'reject'
         check('unknown-field:' + path.stem, not validator.is_valid(candidate))
@@ -122,6 +130,8 @@ def validate_contracts() -> None:
             reject(fixture, fixture + ':' + field + ':' + str(value),
                    lambda d, f=field, v=value: d.__setitem__(f, v))
     reject('final-result', 'invalid-verdict', lambda d: d.__setitem__('verdict', 'PASSED'))
+    reject('v1-policy-plan-v2-result', 'wrong-decision-policy-version',
+           lambda d: d.__setitem__('decision_policy_version', 'other-policy'))
     reject('final-result', 'invalid-date', lambda d: d.__setitem__('timestamp', 'yesterday'))
     reject('final-result', 'empty-summary', lambda d: d.__setitem__('summary', ''))
     reject('final-result', 'oversize-summary', lambda d: d.__setitem__('summary', 'x' * 2001))

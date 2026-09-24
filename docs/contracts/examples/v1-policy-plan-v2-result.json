@@ -1,0 +1,75 @@
+{
+  "protocol_version": "v2",
+  "task_id": "TASK-10000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-20000000-0000-4000-8000-000000000001",
+  "review_id": "REV-30000000-0000-4000-8000-000000000001",
+  "review_type": "PLAN_REVIEW",
+  "review_round": 1,
+  "content_revision": 1,
+  "expected_task_version": 3,
+  "decision_policy_version": "grokbuddy-v1-dual-round",
+  "review_profile": "generic",
+  "review_profile_version": "1.0",
+  "profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "verdict": "NEEDS_CHANGES",
+  "summary": "One bounded Plan correction is required.",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-21T08:00:00Z",
+  "evidence": [
+    {
+      "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+      "locator": "plan.scope",
+      "description": "The frozen Plan scope evidence."
+    }
+  ],
+  "risks": [
+    {
+      "code": "SCOPE_GAP",
+      "description": "The Plan omits one required file.",
+      "blocking": false,
+      "mitigation": "Add the file to the bounded Plan scope."
+    }
+  ],
+  "recommendations": [
+    "Revise only the approved Plan scope."
+  ],
+  "proposed_changes": [
+    {
+      "description": "Add the missing file to the Plan.",
+      "scope": {
+        "files": ["src/example.py"]
+      },
+      "rationale": "The implementation requires this file."
+    }
+  ],
+  "findings": [
+    {
+      "external_finding_key": "plan-scope-gap",
+      "severity": "HIGH",
+      "blocking": true,
+      "category": "SCOPE",
+      "title": "Plan scope is incomplete",
+      "description": "The Plan does not name the required implementation file.",
+      "evidence": {
+        "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+        "locator": "plan.scope",
+        "description": "The frozen scope omits src/example.py."
+      },
+      "impact": "The Worker cannot receive an exact scope anchor.",
+      "recommendation": "Add src/example.py and resubmit the Plan.",
+      "proposed_changes": [
+        "Add src/example.py to the structured scope."
+      ],
+      "scope": {
+        "files": ["src/example.py"]
+      },
+      "status": "OPEN",
+      "actionable": true
+    }
+  ],
+  "verifications": []
+}

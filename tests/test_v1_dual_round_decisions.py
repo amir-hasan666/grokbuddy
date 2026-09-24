@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from grokbuddy.domain.model import HubError
+from grokbuddy.adapters.review_result_fields import frozen_result_fields
 from test_phase6_pack_b import V2Flow, event_for, key
 
 
@@ -43,6 +44,41 @@ def test_plan_r1_pass_approves_immediately_and_freezes_two_round_policy(tmp_path
     assert flow.task['approved_plan_id'] == request['input_artifact_id']
     flow.begin_execution()
     assert len(flow.rows('review_requests', review_type='PLAN_REVIEW')) == 1
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'mismatch'])
+def test_v1_result_policy_binding_rejects_missing_or_mismatched_value(tmp_path, mutation):
+    flow = V2Flow(tmp_path / mutation)
+    flow.plan()
+    rr = flow.request(scenario='PASS')
+    envelope = flow.r.hub.get_review(rr)['request']['envelope']
+    assert frozen_result_fields(envelope)['decision_policy_version'] == envelope['decision_policy_version']
+    payload = _result(flow, rr, 'PASS')
+    if mutation == 'missing':
+        del payload['decision_policy_version']
+    else:
+        payload['decision_policy_version'] = 'other-policy'
+    before = deepcopy(flow.task)
+
+    assert _apply(flow, rr, payload, 'policy-' + mutation) == 'REJECTED'
+    assert flow.task == before
+    assert flow.r.hub.get_review(rr)['request']['status'] == 'PENDING'
+    assert flow.r.hub.get_review(rr)['review'] is None
+    assert flow.rows('inbox_events', review_request_id=rr)[0]['error_code'] == 'VALIDATION_FAILURE'
+
+
+def test_v1_result_policy_binding_same_value_reaches_apply(tmp_path):
+    flow = V2Flow(tmp_path)
+    flow.plan()
+    rr = flow.request(scenario='PASS')
+    envelope = flow.r.hub.get_review(rr)['request']['envelope']
+    payload = _result(flow, rr, 'PASS')
+    assert payload['decision_policy_version'] == envelope['decision_policy_version']
+
+    assert _apply(flow, rr, payload, 'policy-matched') == 'APPLIED'
+    assert flow.task['state'] == 'PLAN_APPROVED'
+    assert flow.r.hub.get_review(rr)['request']['status'] == 'COMPLETED'
+    assert flow.r.hub.get_review(rr)['result']['decision_policy_version'] == envelope['decision_policy_version']
 
 
 @pytest.mark.parametrize('first_verdict', ['NEEDS_CHANGES', 'BLOCK'])

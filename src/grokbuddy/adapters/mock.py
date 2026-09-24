@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from grokbuddy.domain.model import DeliveryReceipt, NormalizedEvent, HubError
 from grokbuddy.ports import ReviewQueue, Clock
+from .review_result_fields import frozen_result_fields
 
 
 class MockReviewerAdapter:
@@ -69,16 +70,9 @@ class MockReviewerAdapter:
     def _result(self, request, spec):
         if spec.get('result') is not None:
             return deepcopy(spec['result'])
-        fields = ('protocol_version', 'task_id', 'review_request_id', 'review_id', 'review_type',
-                  'review_round', 'content_revision', 'review_profile', 'review_profile_version',
-                  'profile_sha256', 'input_sha256')
         scenario = spec['scenario']
         verdict = scenario if scenario in ('PASS', 'NEEDS_CHANGES', 'BLOCK') else 'PASS'
-        result = {k: request[k] for k in fields}
-        if request['protocol_version'] == 'v2':
-            result['expected_task_version'] = request['expected_task_version']
-            if 'decision_policy_version' in request:
-                result['decision_policy_version'] = request['decision_policy_version']
+        result = frozen_result_fields(request)
         result.update(verdict=verdict, summary='Local Mock evaluation: ' + scenario,
                       reviewer={'type': 'mock', 'id': request['expected_reviewer_actor_id']},
                       timestamp=self.timestamp(self.clock.now()))

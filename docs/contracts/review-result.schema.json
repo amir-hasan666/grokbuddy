@@ -352,9 +352,20 @@
     },
     {
       "$ref": "#/$defs/v2Result"
+    },
+    {
+      "$ref": "#/$defs/legacyV2Result"
     }
   ],
   "$defs": {
+    "v2Result": {
+      "allOf": [{"$ref": "#/$defs/v2ResultBody"}],
+      "required": ["decision_policy_version"]
+    },
+    "legacyV2Result": {
+      "allOf": [{"$ref": "#/$defs/v2ResultBody"}],
+      "not": {"required": ["decision_policy_version"]}
+    },
     "v2Scope": {
       "type": "object",
       "properties": {
@@ -415,7 +426,7 @@
       "required": ["finding_id", "outcome", "evidence", "reason"],
       "additionalProperties": false
     },
-    "v2Result": {
+    "v2ResultBody": {
       "type": "object",
       "properties": {
         "protocol_version": {"const": "v2"},
