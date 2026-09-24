@@ -15,12 +15,14 @@
 6. **未授权禁止**：生产 DDL/DML、部署/重启/删资源、改防火墙、GitHub merge/approve/push/force-push、改默认分支。
 7. **产品范围与合同均须对齐**：V1 范围以 `docs/PRODUCT_PATH_V1.md` 为准，现行机器协议以 `docs/contracts/` 为准；两者或代码冲突时报 drift，禁止靠旧 Gate 或「当前代码」降低 V1 需求。
 
-## 正式链（本仓库默认；用户需求保持短句）
+## WorkBuddy Managed Workload（正式业务链）
 
-- 默认走 **GrokBuddy 正式链**：真 Reviewer = `grok-reviewer-b`（REVIEWER_HTTP / wake）。
-- 用户侧足够：`走 GrokBuddy。帮我做：…` 或 Hub 已有任务时 `按流水线走完。`  
+- 普通 WorkBuddy 对话不进入 GrokBuddy。只有 Human 在 WorkBuddy 当前用户消息中满足下述精确触发规则，才通过专用 WorkBuddy ingress 创建 Hub Task；该触发闸不约束下文的 Codex 仓库维护。
+- 已触发的业务 Task 走 **GrokBuddy 正式链**：真 Reviewer = `grok-reviewer-b`（REVIEWER_HTTP / wake）。
+- 新 Task 的当前用户自然语言正文须逐字包含唯一触发语 `启用grokbuddy流程`（常量见 `src/grokbuddy/application/trigger.py` 的 `PHRASE`）；Hub 已有任务时可说 `按流水线走完。`
   **禁止**要求用户每次粘贴本文件约束。
 - 开干前自检：无 mock-reviewer、无主动降级、个性化规则若与本文冲突 → **停并报告**。
+- 此正式链的 Plan / Code 必须绑定当前 Hub Task 的 Grok Review、`PLAN_APPROVED`、`approved_scope` 与 Task lifecycle；Task A 的授权不得用于 Task B。
 - 产品闸见 [docs/PRODUCT_PATH_V1.md](docs/PRODUCT_PATH_V1.md)：
   - 方案未 PASS **禁止写代码**
   - 方案/终审各最多两轮；R1 可建议，R2 仅 PASS/BLOCKED；无方向性问题不得 BLOCKED
@@ -28,6 +30,13 @@
   - 终审 PASS：展示操作方法 + 文件；终审 R2 BLOCKED：仍展示产物 + 理由，并标明未验收通过
 - `PRODUCT_PATH_V1.md` 缺失 → 停，请 Human/Codex 补齐，不得自制平行流程。
 - 旧 6.21 A–I 负面矩阵不是 V1 Exit Gate；新 6.21 是产品流程验收，新 6.22 是实际可用性验收。same-RR re-wake 默认属于 V1.1 reliability backlog，不能以未做生产验证继续阻塞 V1。历史报告状态保持原样。
+
+## GrokBuddy Control Plane Development（Codex 维护）
+
+- Human 在 Codex 会话中明确要求修改本仓库自身代码、合同、测试、文档或自动化时，该指令即为本次仓库维护的授权；不要求先建 WorkBuddy Hub Task，也不要求提供 `PLAN_APPROVED` Task ID 或 `approved_scope`。Hub、MCP、Control Center、Supervisor、Webhook 与 Reviewer routing 均属此类维护。
+- Hub Task 可只读用于复现和验收，但不是 Codex 仓库维护的授权凭证；不得擅自修改业务 Task 数据。
+- 不擅自修改 Credential，不擅自执行 destructive production action；生产级高风险操作仍需 Human 明确确认。保留上述密钥、身份、Hub SoT、生产操作及正式证据边界。
+- 修改后按影响范围运行测试，并审核 Git diff；本地检查不能代替生产验收。
 
 ## 工作方式
 
