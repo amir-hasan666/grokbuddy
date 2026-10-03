@@ -6,6 +6,7 @@ import re
 
 from grokbuddy.domain.model import (ACTIVE_REQUEST, Conflict, HubError, PermissionDenied,
                                    ReviewDeliveryUnavailable, Role)
+from grokbuddy.domain.review_result import frozen_result_fields, result_binding_error
 from .common import Services, audit, uid
 
 
@@ -159,18 +160,149 @@ class GrokRoutingService(Services):
                 # Reviewer read receives the current CAS anchor for completion.
                 envelope['expected_task_version'] = task['version']
             return dict(envelope=envelope, context_artifact_id=rr['context_artifact_id'],
-                        expected_task_state=task['state'], expected_task_version=task['version'])
+                        expected_task_state=task['state'], expected_task_version=task['version'],
+                        result_bindings=frozen_result_fields(envelope),
+                        review_materials=self._grok_materials(repo, reviewer_actor_id, request_id)['artifacts'])
+
+    def grok_result_preflight(self, reviewer_actor_id, request_id, payload):
+        """Read-only schema/binding checks. Findings and verdict apply asynchronously."""
+        current = self.grok_request(reviewer_actor_id, request_id)
+        with self.db.transaction() as repo:
+            actor = self.actor(repo, reviewer_actor_id, Role.REVIEWER)
+            field_path = self.contracts.error_path('result', payload)
+            error = ('VALIDATION_FAILURE', field_path, None) if field_path else result_binding_error(
+                current['envelope'], payload, actor, current['expected_task_version'])
+        return {'valid': error is None, 'review_request_id': request_id,
+                'error_code': error[0] if error else None,
+                'field_path': error[1] if error else None,
+                'task_version': current['expected_task_version'],
+                'checked': ['result_schema', 'request_bindings', 'reviewer_identity', 'task_version'],
+                'not_checked': ['finding_transitions', 'verdict_policy', 'async_application'],
+                'submitted': False}
+
+    def grok_materials(self, reviewer_actor_id, request_id):
+        """Resolve only RR-bound evidence; historical requests stay read-only."""
+        with self.db.transaction() as repo:
+            return self._grok_materials(repo, reviewer_actor_id, request_id)
+
+    def grok_materials_check(self, reviewer_actor_id, request_id):
+        """Read every whitelisted blob; never ACK, create evidence or advance a Task."""
+        with self.db.transaction() as repo:
+            materials = self._grok_materials(repo, reviewer_actor_id, request_id)
+            checks = []
+            for label, value in materials['artifacts'].items():
+                for index, item in enumerate(value if isinstance(value, list) else [value]):
+                    try:
+                        artifact, _ = self.artifact(repo, materials['task_id'],
+                                                    item['artifact_id'], item['sha256'])
+                    except HubError as exc:
+                        checks.append({'material': label, 'index': index, **item,
+                                       'readable': False, 'error_code': exc.code})
+                    else:
+                        checks.append({'material': label, 'index': index, **item,
+                                       'readable': True, 'size_bytes': artifact['size_bytes'],
+                                       'error_code': None})
+            return {'request_id': request_id, 'valid': all(c['readable'] for c in checks),
+                    'checks': checks, 'scope': 'RR_BOUND_ARTIFACT_BYTES', 'submitted': False}
+
+    def _grok_materials(self, repo, reviewer_actor_id, request_id):
+        actor = self.actor(repo, reviewer_actor_id, Role.REVIEWER)
+        rr = repo.get('review_requests', request_id)
+        task = repo.get('tasks', rr['task_id'])
+        if (actor.get('reviewer_type') != 'grok_bot'
+                or rr['envelope']['expected_reviewer_actor_id'] != reviewer_actor_id
+                or not grok_delivery_contract_matches(repo, rr, task, reviewer_actor_id)):
+            raise PermissionDenied('Review request is not routed to this Reviewer')
+
+        def ref(artifact_id, expected_sha=None):
+            artifact = repo.get('artifacts', artifact_id)
+            if (artifact['task_id'] != task['id']
+                    or expected_sha is not None and artifact['sha256'] != expected_sha):
+                raise PermissionDenied('Review material is outside frozen Task scope')
+            return {'artifact_id': artifact_id, 'sha256': artifact['sha256']}
+
+        materials = {
+            'profile': ref(rr['envelope']['profile_artifact_id'], rr['envelope']['profile_sha256']),
+            'input': ref(rr['input_artifact_id'], rr['envelope']['input_sha256']),
+            'context': ref(rr['context_artifact_id']),
+            'original_task': ref(task['original_task_id']),
+        }
+        trigger = task.get('trigger_evidence') or {}
+        if trigger.get('source_artifact_id'):
+            materials['trigger'] = ref(trigger['source_artifact_id'],
+                                       trigger.get('source_artifact_sha256'))
+        if rr['review_type'] == 'PLAN_REVIEW':
+            _, content = self.artifact(repo, task['id'], rr['context_artifact_id'],
+                                       kinds={'SOURCE_FILE'})
+            context = json.loads(content)
+            if context.get('supporting_artifacts'):
+                materials['supporting_artifacts'] = [ref(item['artifact_id'], item['sha256'])
+                                                     for item in context['supporting_artifacts']]
+        if rr['review_type'] == 'FINAL_REVIEW':
+            _, content = self.artifact(repo, task['id'], rr['input_artifact_id'],
+                                       rr['envelope']['input_sha256'], {'FINAL_PACKAGE'})
+            package = json.loads(content)
+            if (package.get('task_id') != task['id']
+                    or package.get('original_task', {}).get('artifact_id') != task['original_task_id']):
+                raise PermissionDenied('Final package does not match its Task')
+            for name in ('original_task', 'approved_plan', 'diff_artifact'):
+                if name in package:
+                    item = package[name]
+                    materials[name] = ref(item['artifact_id'], item['sha256'])
+            for name in ('test_results', 'generated_files'):
+                materials[name] = [ref(item['artifact_id'], item['sha256'])
+                                   for item in package.get(name, [])]
+        return {'request_id': rr['id'], 'task_id': task['id'],
+                'review_type': rr['review_type'], 'request_status': rr['status'],
+                'artifacts': materials}
 
     def grok_artifact(self, reviewer_actor_id, request_id, artifact_id):
-        """Read only input/profile/context bytes referenced by a current RR."""
-        request = self.grok_request(reviewer_actor_id, request_id)
-        allowed = {request['context_artifact_id'],
-                   request['envelope']['input_artifact_id'],
-                   request['envelope']['profile_artifact_id']}
-        if artifact_id not in allowed:
+        """Read only evidence explicitly bound to this RR and its Task."""
+        materials = self.grok_materials(reviewer_actor_id, request_id)
+        allowed = [item for value in materials['artifacts'].values()
+                   for item in (value if isinstance(value, list) else [value])]
+        match = next((item for item in allowed if item['artifact_id'] == artifact_id), None)
+        if match is None:
             raise PermissionDenied('Artifact is outside frozen Reviewer scope')
         with self.db.transaction() as repo:
-            return self.artifact(repo, request['envelope']['task_id'], artifact_id)
+            return self.artifact(repo, materials['task_id'], artifact_id, match['sha256'])
+
+    def grok_ingress_status(self, reviewer_actor_id, ingress_id):
+        """Read a submission receipt without advancing inbox processing."""
+        with self.db.transaction() as repo:
+            self.actor(repo, reviewer_actor_id, Role.REVIEWER)
+            incoming = repo.get('inbox_events', ingress_id)
+            rr = repo.get('review_requests', incoming['review_request_id'])
+            task = repo.get('tasks', rr['task_id'])
+            if (incoming['actor_id'] != reviewer_actor_id
+                    or incoming['task_id'] != task['id']
+                    or rr['envelope']['expected_reviewer_actor_id'] != reviewer_actor_id
+                    or not grok_delivery_contract_matches(repo, rr, task, reviewer_actor_id)):
+                raise PermissionDenied('Ingress receipt is outside Reviewer scope')
+            field_path = incoming.get('field_path')
+            field_path_source = 'STORED' if field_path is not None else None
+            if (field_path is None and incoming['status'] == 'REJECTED'
+                    and incoming.get('event_type') == 'ReviewCompleted'):
+                _, content = self.artifact(repo, task['id'], incoming['payload_artifact_id'],
+                                           incoming['payload_sha256'], {'REVIEW_RESULT'})
+                field_path = self.contracts.error_path('result', json.loads(content))
+                if field_path is not None:
+                    field_path_source = 'CURRENT_SCHEMA_REVALIDATION'
+            return {'ingress_id': incoming['id'], 'review_request_id': rr['id'],
+                    'status': incoming['status'], 'error_code': incoming.get('error_code'),
+                    'field_path': field_path, 'field_path_source': field_path_source,
+                    'reason_code': (incoming.get('rejection_details') or {}).get('reason_code'),
+                    'rejection_details': deepcopy(incoming.get('rejection_details')),
+                    'rejection_details_source': 'STORED' if incoming.get('rejection_details') else None,
+                    'request_status': rr['status'],
+                    'task': {'id': task['id'], 'state': task['state'], 'version': task['version']},
+                    'accepted_review': next((
+                        {'review_id': review['id'], 'reported_verdict': review['reported_verdict'],
+                         'effective_verdict': review['effective_verdict']}
+                        for review in repo.find('reviews', review_request_id=rr['id'])
+                        if incoming['event_type'] == 'ReviewCompleted'
+                        and incoming['status'] in ('APPLIED', 'DUPLICATE')
+                        and review['result_hash'] == incoming['payload_sha256']), None)}
 
     def register_reviewer(self, actor_id, reviewer_actor_id, name, agent_id, server_id):
         """Trusted local setup; never substitutes a credential or proves execution."""

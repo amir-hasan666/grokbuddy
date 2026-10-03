@@ -1,6 +1,10 @@
 # Grok Bot：唤醒和返回通道
 
+2026-10-02 仓内新增 schema bundle、结果预检、方案辅助材料、材料字节检查和接纳回执。实现与未部署/外部待接入边界见 [审核交接优化记录](REVIEW_HANDOFF_OPTIMIZATION_20261002.md)，不改写以下历史核查。
+
 核查日期 2026-09-16。本次只读公开官方资料和本机安装目录痕迹，遵守当前要求：不连接真实 Grok，不触发 Routine，不创建生产 GitHub 自动化。
+
+2026-10-02 导航说明：下文的 UNVERIFIED、disabled 和 Gate 结论保留上述核查日期的历史观察，不是当前运行状态或新的操作授权。后续正式 Reviewer HTTP / webhook 路径与证据边界统一见 [Current Production Baseline](CURRENT_PRODUCTION_BASELINE.md)；当前取件与回执步骤见 [Windows Operations Runbook](PHASE6_OPERATIONS_RUNBOOK.md)。
 
 用户确认产品为 [Grok Bot](https://x.ai/bot) / [官方 overview](https://docs.x.ai/grok-bot/overview)，自述 Grok Bot 与 WorkBuddy 已登录、GitHub Connector 已连接，测试仓库名 `grokbuddy`。状态记录为 USER_REPORTED；仓库 owner/visibility、Connector 实际主体与 scopes、触发器及返回能力仍 UNVERIFIED。不索要 Token / Secret。
 

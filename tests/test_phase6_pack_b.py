@@ -26,7 +26,7 @@ def key():
 
 
 class V2Flow:
-    def __init__(self, tmp_path):
+    def __init__(self, tmp_path, *, profile='generic', profile_version='1.0'):
         self.r = LocalRuntime(tmp_path, CONTRACTS, clock=ManualClock(),
                               trigger_source_key=TRIGGER_KEY)
         message = {
@@ -50,7 +50,9 @@ class V2Flow:
             'end_byte': start + len(PHRASE.encode('utf-8')),
         }
         self.owner = 'workbuddy-ingress'
-        self.task_id = self.r.hub.create_task(self.owner, body, key(), trigger_evidence=evidence)['id']
+        self.task_id = self.r.hub.create_task(
+            self.owner, body, key(), profile=profile, profile_version=profile_version,
+            trigger_evidence=evidence)['id']
 
     @property
     def task(self):

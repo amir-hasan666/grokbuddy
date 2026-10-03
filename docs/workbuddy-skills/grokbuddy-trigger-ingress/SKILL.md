@@ -43,3 +43,5 @@ user-invocable: false
 ```
 
 工具成功后只回报 Hub 返回的 Task ID 和状态。出现 `TRIGGER_NOT_FOUND`、`TRIGGER_SOURCE_UNAVAILABLE`、`PERMISSION_FAILURE` 或连接错误时，原样说明失败并停止；不得回退到普通 `create_task`，不得重复生成新 key 盲重试。
+
+本技能只负责当前消息的精确点火。已创建 Task 的方案 R1 整改使用独立的 [grokbuddy-plan-remediation](../grokbuddy-plan-remediation/SKILL.md)；它不扩大本技能的触发规则或工具权限。

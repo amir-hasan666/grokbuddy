@@ -1,0 +1,34 @@
+{
+  "protocol_version": "v2",
+  "task_id": "TASK-10000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-20000000-0000-4000-8000-000000000001",
+  "review_id": "REV-30000000-0000-4000-8000-000000000001",
+  "review_type": "FINAL_REVIEW",
+  "review_round": 1,
+  "content_revision": 1,
+  "expected_task_version": 3,
+  "decision_policy_version": "grokbuddy-v1-dual-round",
+  "review_profile": "generic",
+  "review_profile_version": "1.1",
+  "profile_sha256": "56f5d3dafb6cd5868462db0dba71bf289ba4e9621071944bb42caff361c8cd2e",
+  "input_sha256": "c667d51e07216b91168fb1529dd4518ea41e8e8efe746f05aae358959d5692ab",
+  "verdict": "PASS",
+  "summary": "离线格式样例：四行儿童诗符合内容与结尾约束。虚构创作无需事实来源或程序测试；此样例不是实际终审。",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-24T00:00:00Z",
+  "evidence": [
+    {
+      "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+      "locator": "用户需求；待终审作品",
+      "description": "逐行核对为四行；小猫找回风筝，最后一行以“小猫笑了”结尾。未以个人偏好增加引用或测试要求。"
+    }
+  ],
+  "risks": [],
+  "recommendations": [],
+  "proposed_changes": [],
+  "findings": [],
+  "verifications": []
+}

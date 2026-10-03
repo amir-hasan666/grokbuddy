@@ -2,10 +2,34 @@ from dataclasses import asdict
 from copy import deepcopy
 import json
 
-from grokbuddy.domain.model import (HubError, Role, ACTIVE_REQUEST, TERMINAL, Conflict)
-from grokbuddy.domain.rules import aggregate_verdict, finding_transition
+from grokbuddy.domain.model import (HubError, Role, ACTIVE_REQUEST, TERMINAL, Conflict,
+                                   IllegalTransition, ReviewFindingTransitionRejected,
+                                   ReviewFindingsUnresolved)
+from grokbuddy.domain.rules import aggregate_verdict, finding_transition, FINDING_EDGES
 from grokbuddy.domain.review_policy import V1_LIMIT, is_v1_dual_round
+from grokbuddy.domain.review_result import result_binding_error
 from .common import Services, canonical, digest, uid, audit
+
+
+def _finding_rejection_details(reason_code, field_path, findings, invalid_transitions=None):
+    # Persist only controlled metadata from validated, Task-scoped records.
+    # Never include result text, evidence text, exception messages or credentials.
+    unresolved = [
+        {'finding_id': finding['id'], 'current_status': finding['status'],
+         'severity': finding['severity']}
+        for finding in findings
+        if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')
+        and not finding.get('advisory', False)
+    ]
+    details = {
+        'reason_code': reason_code, 'field_path': field_path,
+        'unresolved_findings': unresolved,
+        'blocking_open_findings': [finding['finding_id'] for finding in unresolved
+                                  if finding['current_status'] == 'OPEN'],
+    }
+    if invalid_transitions is not None:
+        details['invalid_finding_transitions'] = invalid_transitions
+    return details
 
 
 def persist_event(repo, services, event):
@@ -108,18 +132,10 @@ class EventService(Services):
                     return self._finish(repo, incoming, actor, 'LATE_EVENT', event_hash, semantic_key)
                 if incoming['event_type'] == 'ReviewCompleted':
                     self.contracts.validate('result', payload)
-                    for key in ('protocol_version', 'task_id', 'review_request_id', 'review_id', 'review_type',
-                                'review_round', 'content_revision', 'review_profile', 'review_profile_version',
-                                'profile_sha256', 'input_sha256'):
-                        if payload[key] != expected[key]:
-                            raise HubError('Result does not match frozen request')
-                    if payload.get('decision_policy_version') != expected.get('decision_policy_version'):
-                        raise HubError('Result decision policy does not match frozen request')
-                    if payload['reviewer']['id'] != actor['id'] or payload['reviewer']['type'] != actor['reviewer_type']:
-                        raise HubError('Result reviewer declaration mismatch')
-                    if (payload['protocol_version'] == 'v2'
-                            and payload['expected_task_version'] != task['version']):
-                        raise Conflict('Review result used a stale Task version')
+                    binding_error = result_binding_error(expected, payload, actor, task['version'])
+                    if binding_error:
+                        code, _, message = binding_error
+                        raise (Conflict if code == 'CONFLICT' else HubError)(message)
                 elif incoming['event_type'] not in ('ReviewStarted', 'ReviewFailed'):
                     raise HubError('Unknown normalized event type')
                 elif payload != {'protocol_version': expected['protocol_version']}:
@@ -151,10 +167,16 @@ class EventService(Services):
                 incoming = repo.get('inbox_events', incoming_id)
                 if incoming['status'] == 'READY':
                     incoming.update(status='REJECTED', error_code=exc.code)
+                    details = getattr(exc, 'rejection_details', None)
+                    if details is not None:
+                        incoming.update(rejection_details=deepcopy(details),
+                                        field_path=details['field_path'])
                     repo.save('inbox_events', incoming)
                     actor = self.actor(repo, 'system', Role.SYSTEM)
                     audit(repo, self.clock, actor, 'VALIDATION_FAILURE', incoming['task_id'],
-                          request_id=incoming['review_request_id'], event_id=incoming['event_id'], code=exc.code)
+                          request_id=incoming['review_request_id'], event_id=incoming['event_id'], code=exc.code,
+                          **({'reason_code': details['reason_code'], 'field_path': details['field_path']}
+                             if details is not None else {}))
             return 'REJECTED'
 
     def _finish(self, repo, incoming, actor, outcome, event_hash, key, insert=True):
@@ -212,7 +234,8 @@ class EventService(Services):
                           if finding['status'] not in ('VERIFIED', 'WAIVED_BY_HUMAN')
                           and not finding.get('advisory', False)]
             if result['verdict'] == 'PASS' and unresolved:
-                raise HubError('PASS cannot leave actionable findings unresolved')
+                raise ReviewFindingsUnresolved(_finding_rejection_details(
+                    'PASS_HAS_UNRESOLVED_FINDINGS', '$.verdict', unresolved))
             actionable_after = {finding['id'] for finding in unresolved}
             if result['verdict'] == 'NEEDS_CHANGES' and not set(actionable_ids).intersection(actionable_after):
                 raise HubError('NEEDS_CHANGES requires an actionable finding')
@@ -325,7 +348,8 @@ class EventService(Services):
         status_by_id = {item['finding_id']: ('VERIFIED' if item['outcome'] == 'VERIFIED'
                                              else 'OPEN' if item['outcome'] == 'REOPENED' else None)
                         for item in result['verifications']}
-        for item in result['verifications']:
+        invalid_transitions = []
+        for index, item in enumerate(result['verifications']):
             self.artifact(repo, task['id'], item['evidence']['artifact_id'])
             finding = repo.get('review_findings', item['finding_id'])
             if (finding['task_id'] != task['id'] or item['finding_id'] not in frozen
@@ -338,7 +362,21 @@ class EventService(Services):
                     raise HubError('Closed or advisory finding cannot become advisory again')
             else:
                 action = 'verify' if item['outcome'] == 'VERIFIED' else 'reopen'
-                finding_transition(finding['status'], action, Role.REVIEWER)
+                try:
+                    finding_transition(finding['status'], action, Role.REVIEWER)
+                except IllegalTransition:
+                    invalid_transitions.append({
+                        'finding_id': finding['id'], 'current_status': finding['status'],
+                        'requested_outcome': item['outcome'],
+                        'allowed_statuses': sorted(FINDING_EDGES[action][1]),
+                        'field_path': f'$.verifications[{index}].finding_id',
+                    })
+        if invalid_transitions:
+            relevant = projected if rr['review_type'] != 'PLAN_REVIEW' else [
+                finding for finding in projected if finding.get('review_type') == 'PLAN_REVIEW']
+            raise ReviewFindingTransitionRejected(_finding_rejection_details(
+                'FINDING_NOT_READY_FOR_VERIFICATION', invalid_transitions[0]['field_path'],
+                relevant, invalid_transitions))
         projected = [{**finding,
                       'status': status_by_id.get(finding['id']) or finding['status'],
                       'advisory': finding.get('advisory', False) or

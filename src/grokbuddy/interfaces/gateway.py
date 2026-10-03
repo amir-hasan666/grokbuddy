@@ -18,9 +18,11 @@ TOOL_NAMES = (
     "submit_plan",
     "request_plan_review",
     "get_plan_review",
+    "get_plan_review_readiness",
     "respond_to_review",
     "submit_artifact",
     "record_workbuddy_message",
+    "preflight_final_review",
     "request_final_review",
     "get_final_review",
     "get_task_status",
@@ -117,7 +119,7 @@ class ClientGateway:
 
     def _submit_plan(self, payload):
         _strict(payload, {"task_id", "plan_artifact_id", "expected_version", "idempotency_key"},
-                {"approved_scope"})
+                {"approved_scope", "supporting_artifact_ids"})
         task_id = _text(payload, "task_id")
         key = _text(payload, "idempotency_key")
         started = self.hub.move(
@@ -134,6 +136,7 @@ class ClientGateway:
             started["version"],
             _derived_key(key, "submit-plan"),
             approved_scope=payload.get("approved_scope"),
+            supporting_artifact_ids=payload.get("supporting_artifact_ids"),
         )
 
     def _request_plan_review(self, payload):
@@ -160,6 +163,10 @@ class ClientGateway:
     def _get_plan_review(self, payload):
         return self._review(payload, "PLAN_REVIEW")
 
+    def _get_plan_review_readiness(self, payload):
+        _strict(payload, {"task_id"})
+        return self.hub.get_plan_review_readiness(self.actor_id, _text(payload, "task_id"))
+
     def _respond_to_review(self, payload):
         _strict(
             payload,
@@ -180,7 +187,9 @@ class ClientGateway:
             raise HubError("Evidence is required for reject or fix")
         expected_version = _integer(payload, "expected_version")
         key = _text(payload, "idempotency_key")
-        if action == "fix":
+        # Plan remediation stays in PLANNING. The application service still
+        # enforces state, evidence, active-review, role and CAS guards.
+        if action == "fix" and matches[0].get("review_type") != "PLAN_REVIEW":
             task = self.hub.move(
                 self.actor_id,
                 task_id,
@@ -238,6 +247,18 @@ class ClientGateway:
         artifact = self.hub.get_artifact(artifact_id)
         return {"artifact_id": artifact["id"], "sha256": artifact["sha256"]}
 
+    def _preflight_final_review(self, payload):
+        _strict(payload, {"task_id", "test_artifact_id", "diff_artifact_id", "change_scope",
+                          "changed_files", "self_test_summary", "known_risks", "unverified_items"},
+                {"operation_method", "generated_files"})
+        for name in ('task_id', 'test_artifact_id', 'diff_artifact_id', 'change_scope', 'self_test_summary'):
+            _text(payload, name)
+        for name in ('changed_files', 'known_risks', 'unverified_items'):
+            _string_list(payload, name)
+        if 'operation_method' in payload:
+            _text(payload, 'operation_method')
+        return self.hub.preflight_final_review(self.actor_id, _text(payload, "task_id"), payload)
+
     def _request_final_review(self, payload):
         _strict(
             payload,
@@ -256,6 +277,12 @@ class ClientGateway:
         task_id = _text(payload, "task_id")
         key = _text(payload, "idempotency_key")
         expected_version = _integer(payload, "expected_version")
+        material_fields = {name: value for name, value in payload.items()
+                           if name not in {"expected_version", "idempotency_key", "begin_execution",
+                                           "reviewer_id"}}
+        preflight = self._preflight_final_review(material_fields)
+        if not preflight['ready']:
+            raise HubError('Final material preflight: ' + preflight['issues'][0]['message'])
         if payload["begin_execution"]:
             executing = self.hub.move(
                 self.actor_id,

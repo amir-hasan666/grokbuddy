@@ -118,15 +118,19 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         approved_scope: ApprovedPlanScope,
         expected_version: int,
         idempotency_key: str,
+        supporting_artifact_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Attach a Plan artifact with its non-empty structured approved scope."""
-        return _call(gateway, "submit_plan", {
+        """Attach a Plan, structured scope and explicitly referenced source/evidence Artifacts."""
+        payload = {
             "task_id": task_id,
             "plan_artifact_id": plan_artifact_id,
             "approved_scope": approved_scope.model_dump(exclude_none=True),
             "expected_version": expected_version,
             "idempotency_key": idempotency_key,
-        })
+        }
+        if supporting_artifact_ids is not None:
+            payload['supporting_artifact_ids'] = supporting_artifact_ids
+        return _call(gateway, "submit_plan", payload)
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
     def request_plan_review(
@@ -149,6 +153,11 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
     def get_plan_review(review_request_id: str) -> dict[str, Any]:
         """Query a plan review request separately from review submission."""
         return _call(gateway, "get_plan_review", {"review_request_id": review_request_id})
+
+    @server.tool(annotations=READ_ONLY)
+    def get_plan_review_readiness(task_id: str) -> dict[str, Any]:
+        """Read Plan findings and preparation checks without creating a review round."""
+        return _call(gateway, "get_plan_review_readiness", {"task_id": task_id})
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
     def respond_to_review(
@@ -204,6 +213,32 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
             "task_id": task_id, "stage": stage, "body": body,
             "idempotency_key": idempotency_key,
         })
+
+    @server.tool(annotations=READ_ONLY)
+    def preflight_final_review(
+        task_id: str,
+        test_artifact_id: str,
+        diff_artifact_id: str,
+        change_scope: str,
+        changed_files: list[str],
+        self_test_summary: str,
+        known_risks: list[str],
+        unverified_items: list[str],
+        operation_method: str | None = None,
+        generated_files: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """Read-only final-material checks; failures consume no review round or Task version."""
+        payload = {
+            'task_id': task_id, 'test_artifact_id': test_artifact_id,
+            'diff_artifact_id': diff_artifact_id, 'change_scope': change_scope,
+            'changed_files': changed_files, 'self_test_summary': self_test_summary,
+            'known_risks': known_risks, 'unverified_items': unverified_items,
+        }
+        if operation_method is not None:
+            payload['operation_method'] = operation_method
+        if generated_files is not None:
+            payload['generated_files'] = generated_files
+        return _call(gateway, 'preflight_final_review', payload)
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
     def request_final_review(

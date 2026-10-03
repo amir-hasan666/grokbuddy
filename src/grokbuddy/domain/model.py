@@ -42,6 +42,19 @@ class IllegalTransition(HubError):
     code = "ILLEGAL_TRANSITION"
 
 
+class ReviewFindingTransitionRejected(IllegalTransition):
+    """A review rejection with application-built, safe Finding diagnostics."""
+    def __init__(self, details):
+        super().__init__('Finding verification is invalid for its current status')
+        self.rejection_details = details
+
+
+class ReviewFindingsUnresolved(HubError):
+    def __init__(self, details):
+        super().__init__('PASS cannot leave actionable findings unresolved')
+        self.rejection_details = details
+
+
 class RetryableDelivery(HubError):
     code = "RETRYABLE"
 

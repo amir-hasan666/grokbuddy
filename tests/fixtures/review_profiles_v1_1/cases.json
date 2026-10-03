@@ -1,0 +1,126 @@
+{
+  "execution_status": "NOT_RUN",
+  "purpose": "Evaluator-only expectations; never include these answers in Reviewer input.",
+  "cases": [
+    {
+      "id": "software-pass", "domain": "software", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/software-pass.md", "expected_outcome": "PASS",
+      "required_observations": ["原值与列序保持，明确失败路径及允许的目录内临时写入", "方案测试安排与需求相符"],
+      "forbidden_objections": ["方案阶段没有成品或生产运行结果", "用户允许的输出目录内临时文件必然违反只读"]
+    },
+    {
+      "id": "software-defect", "domain": "software", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/software-defect.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["代码截断小数违反四舍五入需求，2.675 应为 268", "单个整额测试未覆盖小数进位；引用实际函数"],
+      "forbidden_objections": ["必须更换语言或框架", "没有调用 SQL 或部署 IIS"]
+    },
+    {
+      "id": "data-pass", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/data-pass.md", "expected_outcome": "PASS",
+      "required_observations": ["总退货单数除以总订单数，样例 9.09%", "零分母和输入边界有验证安排"],
+      "forbidden_objections": ["文件统计也必须先连接数据库", "未提供生产执行计划"]
+    },
+    {
+      "id": "data-defect", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/data-defect.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["平均区域比率不等于整体订单退货率，样例应为 9.09%", "所列自测不能验证整体分母口径"],
+      "forbidden_objections": ["必须改为数据库计算", "无证据地认定输入样例是生产泄漏"]
+    },
+    {
+      "id": "document-pass", "domain": "document_analysis", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/document-pass.md", "expected_outcome": "PASS",
+      "required_observations": ["12/30=40%，与 S1 一致", "已声明样本局限并避免因果外推，满足纯文本交付"],
+      "forbidden_objections": ["虚构给定样例必须联网查真实来源", "纯文本必须提供 PDF 渲染或单元测试"]
+    },
+    {
+      "id": "document-defect", "domain": "document_analysis", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/document-defect.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["比例应为 40% 而非 60%", "自愿偏好调查不足以证明全体客户效率必然提升，违反明确需求"],
+      "forbidden_objections": ["必须增设随机实验才能修正文稿", "仅因文风而阻断"]
+    },
+    {
+      "id": "web-pass", "domain": "web_visual", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/web-pass.md", "expected_outcome": "PASS",
+      "required_observations": ["320px 约束、键盘交互和提交反馈均有对应设计与验证", "方案阶段视觉验证尚待实施是合理安排"],
+      "forbidden_objections": ["先上线生产才能批准方案", "必须提供尚未实现的页面截图"]
+    },
+    {
+      "id": "web-defect", "domain": "web_visual", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/web-defect.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["固定 960px 不可缩布局与 320px 无横向滚动冲突", "桌面截图和文件存在不足以验证手机约束"],
+      "forbidden_objections": ["必须换成某个特定前端框架", "个人配色偏好作为核心问题"]
+    },
+    {
+      "id": "creative-pass", "domain": "creative", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/creative-pass.md", "expected_outcome": "PASS",
+      "required_observations": ["四行、轻快、找回风筝且结尾符合指定文字", "诗歌为虚构创作，不需要事实引用"],
+      "forbidden_objections": ["风筝躲进云朵不科学", "没有自动化测试或外部引用", "个人更喜欢悲剧结尾"]
+    },
+    {
+      "id": "creative-defect", "domain": "creative", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/creative-defect.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["只有三行且结尾未满足明确文字要求", "风筝永不回来与找回风筝的内容约束冲突"],
+      "forbidden_objections": ["缺少虚构故事事实来源", "仅以个人审美评价代替明确约束证据"]
+    },
+    {
+      "id": "minor-only", "domain": "creative", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/minor-only.md", "expected_outcome": "PASS",
+      "required_observations": ["时间和对象保留，已完成简化", "措辞偏好至多作为 recommendation"],
+      "forbidden_objections": ["周五必须改星期五，否则 NEEDS_CHANGES"]
+    },
+    {
+      "id": "not-applicable", "domain": "creative", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/not-applicable.md", "expected_outcome": "PASS",
+      "required_observations": ["三个名字均二至四字且符合轻快命名目标", "数据库、代码测试和来源验证不适用"],
+      "forbidden_objections": ["要求 SQL 执行计划、软件部署或引用资料"]
+    },
+    {
+      "id": "material-unreadable", "domain": "software", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/material-unreadable.md", "expected_outcome": "TECHNICAL_FAILURE",
+      "required_observations": ["取得真实授权读取失败证据后报告技术缺口", "不提交业务 PASS/BLOCK，不把不可读推断为代码不存在"],
+      "forbidden_objections": ["凭自测摘要 PASS", "擅自扩大权限", "将取件 403 作为业务 BLOCK"]
+    },
+    {
+      "id": "hash-mismatch", "domain": "software", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/hash-mismatch.md", "expected_outcome": "TECHNICAL_FAILURE",
+      "required_observations": ["以实际 bytes 校验失败为依据停止，报告技术问题", "不换 Profile 或猜冻结值继续"],
+      "forbidden_objections": ["内容看似正确所以 PASS", "发送业务 BLOCK 代替技术失败"]
+    },
+    {
+      "id": "visual-unreadable", "domain": "web_visual", "review_type": "FINAL_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/visual-unreadable.md", "expected_outcome": "TECHNICAL_FAILURE",
+      "required_observations": ["必须确认图片实际可见，当前缺口不能证明标题清晰", "不声称已看图，报告材料或能力不可用"],
+      "forbidden_objections": ["仅凭文件存在和 Hash 就 PASS", "未见图片就断言图片设计失败"]
+    },
+    {
+      "id": "allslowcheck-original", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/allslowcheck-original.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["P7 自动复制到临时目录与第 5 节只允许 output 写入冲突", "影响评分未证明实际占比，低分或低置信不等于已排除", "AI 自报 root_cause_found 的闭环依据不足"],
+      "forbidden_objections": ["未采集终端本机就一律否定已确认的服务端范围", "方案阶段未提供生产运行结果", "仅因项目名触发固定 verdict"]
+    },
+    {
+      "id": "allslowcheck-revised", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/allslowcheck-revised.md", "expected_outcome": "PASS",
+      "required_observations": ["没有自动复制；写入范围明确", "实测贡献与启发式优先级区分，不足证据不排除", "模型建议须经过证据核验，现场验证边界如实说明"],
+      "forbidden_objections": ["因缺终端代理或尚未现场测试继续阻断", "要求生产写入来证明只读诊断的根因", "要求估计比例一定凑齐 100%"]
+    },
+    {
+      "id": "allslowcheck-renamed", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 1,
+      "review_profile": "generic", "input_path": "inputs/allslowcheck-renamed.md", "expected_outcome": "NEEDS_CHANGES",
+      "required_observations": ["系统临时目录复制超出 export 写入范围", "经验分数不等于真实占比，无证据不得确认排除或根因"],
+      "forbidden_objections": ["必须恢复 allslowcheck 名称", "拿原案例的行号冒充当前证据"]
+    },
+    {
+      "id": "r2-resolved", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 2,
+      "review_profile": "generic", "input_path": "inputs/r2-resolved.md", "expected_outcome": "PASS",
+      "required_observations": ["在真实 Finding context 下验证整体分母修复", "表头用词偏好不阻断，不要求第三轮"],
+      "forbidden_objections": ["输出 NEEDS_CHANGES", "自造 finding_id 或未经证据关闭旧 Finding"]
+    },
+    {
+      "id": "r2-substantive", "domain": "data", "review_type": "PLAN_REVIEW", "review_round": 2,
+      "review_profile": "generic", "input_path": "inputs/r2-substantive.md", "expected_outcome": "BLOCK",
+      "required_observations": ["删除输入的行为未改变，HIGH blocking 实质问题仍存在", "依据真实 Finding context 返回合法阻断类别和证据，拒绝第三轮"],
+      "forbidden_objections": ["因其他小问题已修复就 PASS", "仅改名即可关闭删除风险", "输出第三轮修改要求"]
+    }
+  ]
+}

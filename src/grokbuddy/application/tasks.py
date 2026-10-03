@@ -193,6 +193,72 @@ class TaskService(Services):
         with self.db.transaction() as repo:
             return repo.find('review_findings', task_id=task_id)
 
+    def get_plan_review_readiness(self, actor_id, task_id):
+        """A Builder-scoped, read-only preparation hint; request guards remain authoritative."""
+        with self.db.transaction() as repo:
+            actor = self.actor(repo, actor_id, Role.BUILDER)
+            task = self.task_for(repo, task_id, actor, live=False)
+            requests = repo.find('review_requests', task_id=task_id, review_type='PLAN_REVIEW')
+            current_round = max((request['review_round'] for request in requests), default=0)
+            limit = task['plan_limit']
+            if task.get('decision_policy_version') == V1_DUAL_ROUND:
+                limit = min(limit, V1_LIMIT)
+            bound_material_ids = {ref['artifact_id'] for ref in task.get('current_plan_material_refs', [])}
+            findings = []
+            for finding in repo.find('review_findings', task_id=task_id):
+                if finding.get('review_type') != 'PLAN_REVIEW':
+                    continue
+                next_action = None
+                if not finding.get('advisory', False):
+                    next_action = {
+                        'OPEN': 'accept_or_reject_with_evidence',
+                        'ACCEPTED': 'fix_with_evidence',
+                        'FIXED': 'reviewer_verification',
+                        'REJECTED_WITH_EVIDENCE': 'reviewer_verification',
+                    }.get(finding['status'])
+                fix_evidence_id = None
+                if finding['status'] == 'FIXED' and not finding.get('advisory', False):
+                    fixes = [event for event in repo.find('finding_events', task_id=task_id,
+                                                          finding_id=finding['id'])
+                             if event['new_status'] == 'FIXED' and event.get('evidence_artifact_id')]
+                    if fixes:
+                        fix_evidence_id = fixes[-1]['evidence_artifact_id']
+                findings.append({
+                    'finding_id': finding['id'], 'review_id': finding['review_id'],
+                    'current_status': finding['status'], 'finding_version': finding['version'],
+                    'severity': finding['severity'], 'advisory': finding.get('advisory', False),
+                    'next_action': next_action, 'fix_evidence_artifact_id': fix_evidence_id,
+                    'fix_evidence_bound': fix_evidence_id in bound_material_ids if fix_evidence_id else False,
+                })
+            unready = [finding['finding_id'] for finding in findings
+                       if finding['current_status'] in ('OPEN', 'ACCEPTED') and not finding['advisory']]
+            unbound = [finding['finding_id'] for finding in findings
+                       if finding['current_status'] == 'FIXED' and not finding['advisory']
+                       and not finding['fix_evidence_bound']]
+            checks = {
+                'planning': task['state'] == 'PLANNING',
+                'no_active_review': not task['active_rr_id'],
+                'task_live': task['state'] not in TERMINAL and self.clock.now() < task['deadline_at'],
+                'automation_unfrozen': not task.get('automation_frozen', False),
+                'plan_input_present': bool(task.get('current_plan_id')),
+                'plan_scope_present': task.get('review_protocol_version') != 'v2' or bool(
+                    task.get('current_plan_scope') and task.get('current_plan_scope_hash')),
+                'round_available': current_round < limit,
+            }
+            can_request = all(checks.values())
+            return {
+                'task_id': task_id, 'task_state': task['state'],
+                'expected_task_version': task['version'], 'active_rr_id': task['active_rr_id'],
+                'current_plan_id': task.get('current_plan_id'),
+                'decision_policy_version': task.get('decision_policy_version'),
+                'gate_reason': task.get('gate_reason'), 'deadline_at': task['deadline_at'],
+                'next_review_round': current_round + 1, 'round_limit': limit,
+                'rounds_remaining': max(0, limit - current_round),
+                'checks': checks, 'can_request_review': can_request,
+                'ready_for_review': can_request and not unready and not unbound,
+                'unready_findings': unready, 'unbound_fix_evidence': unbound, 'findings': findings,
+            }
+
     def list_actionable_findings(self, task_id, review_request_id=None):
         """Return Hub-authoritative, non-closed findings for a Task or one Review APPLY."""
         with self.db.transaction() as repo:
@@ -260,15 +326,28 @@ class TaskService(Services):
             box['response'] = result
             return result
 
-    def submit_plan(self, actor_id, task_id, artifact_id, expected_version, key, approved_scope=None):
+    def submit_plan(self, actor_id, task_id, artifact_id, expected_version, key, approved_scope=None,
+                    supporting_artifact_ids=None):
+        params = [task_id, artifact_id, expected_version, approved_scope]
+        if supporting_artifact_ids is not None:
+            params.append(supporting_artifact_ids)
         with self.command(actor_id, 'submit_plan', key,
-                          [task_id, artifact_id, expected_version, approved_scope], Role.BUILDER) as (repo, actor, box):
+                          params, Role.BUILDER) as (repo, actor, box):
             if 'replay' in box:
                 return box['replay']
             task = self.task_for(repo, task_id, actor, expected_version)
             if task['state'] != 'PLANNING' or task['active_rr_id']:
                 raise HubError('Plan can only change while planning')
             self.artifact(repo, task_id, artifact_id, kinds={'PLAN'})
+            materials = []
+            if supporting_artifact_ids is not None:
+                if (not isinstance(supporting_artifact_ids, list)
+                        or any(not isinstance(item, str) or not item for item in supporting_artifact_ids)
+                        or len(set(supporting_artifact_ids)) != len(supporting_artifact_ids)):
+                    raise HubError('Plan supporting Artifacts must be unique Artifact IDs')
+                for identity in supporting_artifact_ids:
+                    material, _ = self.artifact(repo, task_id, identity, kinds={'SOURCE_FILE', 'EVIDENCE'})
+                    materials.append({'artifact_id': identity, 'sha256': material['sha256']})
             scope = None
             if task.get('review_protocol_version') == 'v2':
                 scope = _validated_scope(approved_scope)
@@ -279,6 +358,7 @@ class TaskService(Services):
                     task['revision_round'] = task.get('revision_round', 0) + 1
                     task['pending_revision_kind'] = None
             task.update(current_plan_id=artifact_id, current_final_id=None, approved_plan_id=None,
+                         current_plan_material_refs=materials,
                          current_plan_scope=scope, current_plan_scope_hash=digest(scope) if scope else None,
                          human_modification_scope=None, human_modification_finding_ids=None,
                          content_revision=task['content_revision'] + 1)
@@ -328,35 +408,7 @@ class TaskService(Services):
                 raise HubError('Package revision mismatch')
             if package['self_test']['status'] != 'PASS':
                 raise HubError('Package self-test did not pass')
-            if task.get('decision_policy_version') == V1_DUAL_ROUND:
-                method = package.get('operation_method')
-                files = package.get('generated_files')
-                if not isinstance(method, str) or not method.strip():
-                    raise HubError('V1 Final package requires operation method')
-                if _RESTRICTED_TEXT.search(method):
-                    raise HubError('Operation method contains restricted content')
-                if not isinstance(files, list) or not files:
-                    raise HubError('V1 Final package requires generated file Artifacts')
-                paths = [item['path'] for item in files]
-                if (any(not _display_file_path(path) for path in paths)
-                        or len(set(paths)) != len(paths)
-                        or not set(paths).issubset(set(package['changed_files']))):
-                    raise HubError('Generated file paths must be unique approved relative paths')
-                for item in files:
-                    self.artifact(repo, task_id, item['artifact_id'], item['sha256'],
-                                  {'SOURCE_FILE'})
-            if package['original_task']['artifact_id'] != task['original_task_id'] or package['approved_plan']['artifact_id'] != task['approved_plan_id']:
-                raise HubError('Package must reference original task and approved plan')
-            refs = [package['original_task'], package['approved_plan'], *package['test_results']]
-            if 'diff_artifact' in package:
-                refs.append(package['diff_artifact'])
-            for ref in refs:
-                self.artifact(repo, task_id, ref['artifact_id'], ref['sha256'])
-            for ref in package['test_results']:
-                self.artifact(repo, task_id, ref['artifact_id'], ref['sha256'], {'TEST_RESULT'})
-            if 'diff_artifact' in package:
-                ref = package['diff_artifact']
-                self.artifact(repo, task_id, ref['artifact_id'], ref['sha256'], {'DIFF'})
+            self._validate_final_materials(repo, task, package)
             if task['self_test_id'] not in {r['artifact_id'] for r in package['test_results']}:
                 raise HubError('Package omits current self-test evidence')
             profile = repo.get('review_profiles', task['profile'] + '@' + task['profile_version'])
@@ -365,9 +417,6 @@ class TaskService(Services):
             self.artifact(repo, task_id, package['profile_artifact_id'], profile['sha256'], {'SOURCE_FILE'})
             self.ensure_actions_closed(repo, task)
             if task.get('review_protocol_version') == 'v2':
-                approved_files = set((task.get('approved_scope') or {}).get('files', []))
-                if not set(package['changed_files']).issubset(approved_files):
-                    raise HubError('Final package changed files exceed approved Plan scope')
                 if task.get('pending_revision_kind') == 'FINAL_REVIEW':
                     task['revision_round'] = task.get('revision_round', 0) + 1
                     task['pending_revision_kind'] = None
@@ -376,6 +425,89 @@ class TaskService(Services):
             self.touch(repo, task)
             box['response'] = result
             return result
+
+    def _validate_final_materials(self, repo, task, package):
+        """Identical evidence checks for preflight and the authoritative submission."""
+        task_id = task['id']
+        if task.get('decision_policy_version') == V1_DUAL_ROUND:
+            method, files = package.get('operation_method'), package.get('generated_files')
+            if not isinstance(method, str) or not method.strip():
+                raise HubError('V1 Final package requires operation method')
+            if _RESTRICTED_TEXT.search(method):
+                raise HubError('Operation method contains restricted content')
+            if not isinstance(files, list) or not files:
+                raise HubError('V1 Final package requires generated file Artifacts')
+            paths = [item['path'] for item in files]
+            if (any(not _display_file_path(path) for path in paths)
+                    or len(set(paths)) != len(paths)
+                    or not set(paths).issubset(set(package['changed_files']))):
+                raise HubError('Generated file paths must be unique approved relative paths')
+            for item in files:
+                self.artifact(repo, task_id, item['artifact_id'], item['sha256'], {'SOURCE_FILE'})
+        if (package['original_task']['artifact_id'] != task['original_task_id']
+                or package['approved_plan']['artifact_id'] != task['approved_plan_id']):
+            raise HubError('Package must reference original task and approved plan')
+        for item in (package['original_task'], package['approved_plan']):
+            self.artifact(repo, task_id, item['artifact_id'], item['sha256'])
+        for item in package['test_results']:
+            self.artifact(repo, task_id, item['artifact_id'], item['sha256'], {'TEST_RESULT'})
+        if 'diff_artifact' in package:
+            item = package['diff_artifact']
+            self.artifact(repo, task_id, item['artifact_id'], item['sha256'], {'DIFF'})
+        if task.get('review_protocol_version') == 'v2':
+            approved_files = set((task.get('approved_scope') or {}).get('files', []))
+            if not set(package['changed_files']).issubset(approved_files):
+                raise HubError('Final package changed files exceed approved Plan scope')
+
+    def preflight_final_review(self, actor_id, task_id, fields):
+        """Check supplied material bytes before gateway commands create or change state."""
+        with self.db.transaction() as repo:
+            actor = self.actor(repo, actor_id, Role.BUILDER)
+            task = self.task_for(repo, task_id, actor, live=False)
+            try:
+                def ref(identity):
+                    item, _ = self.artifact(repo, task_id, identity)
+                    return {'artifact_id': item['id'], 'sha256': item['sha256']}
+
+                profile = repo.get('review_profiles', task['profile'] + '@' + task['profile_version'])
+                package = {name: fields[name] for name in (
+                    'change_scope', 'changed_files', 'known_risks', 'unverified_items')}
+                package.update(protocol_version='v1', task_id=task_id,
+                               content_revision=task['content_revision'] + 1,
+                               original_task=ref(task['original_task_id']),
+                               approved_plan=ref(task['approved_plan_id']),
+                               diff_artifact=ref(fields['diff_artifact_id']),
+                               test_results=[ref(fields['test_artifact_id'])],
+                               self_test={'status': 'PASS', 'summary': fields['self_test_summary']},
+                               review_profile=task['profile'], review_profile_version=task['profile_version'],
+                               profile_sha256=profile['sha256'])
+                if 'operation_method' in fields:
+                    package['operation_method'] = fields['operation_method']
+                if 'generated_files' in fields:
+                    files = fields['generated_files']
+                    if (not isinstance(files, list) or any(
+                            not isinstance(item, dict) or set(item) != {'path', 'artifact_id'}
+                            or any(not isinstance(v, str) or not v for v in item.values())
+                            for item in files)):
+                        raise HubError('generated_files must contain path and artifact_id')
+                    package['generated_files'] = [{'path': item['path'], **ref(item['artifact_id'])}
+                                                  for item in files]
+                field_path = self.contracts.final_materials_error_path(package)
+                if field_path is not None:
+                    return {'ready': False, 'task_id': task_id, 'submitted': False,
+                            'issues': [{'error_code': 'VALIDATION_FAILURE', 'field_path': field_path,
+                                        'message': 'Final package material contract is invalid'}]}
+                self._validate_final_materials(repo, task, package)
+            except HubError as exc:
+                return {'ready': False, 'task_id': task_id, 'submitted': False,
+                        'issues': [{'error_code': exc.code, 'field_path': None, 'message': str(exc)}]}
+            return {'ready': True, 'task_id': task_id, 'submitted': False, 'issues': [],
+                    'provided_file_paths': [item['path'] for item in package.get('generated_files', [])],
+                    'changed_files_without_source': sorted(set(package['changed_files']) - {
+                        item['path'] for item in package.get('generated_files', [])}),
+                    'checked': ['package_material_contract', 'task_scope', 'artifact_bytes', 'approved_files'],
+                    'not_checked': ['worker_completion', 'self_test_transition', 'reviewer_delivery',
+                                    'semantic_material_completeness', 'async_application']}
 
     def begin_final_fix(self, actor_id, task_id, finding_ids, proposed_scope, expected_version, key):
         params = [task_id, finding_ids, proposed_scope, expected_version]

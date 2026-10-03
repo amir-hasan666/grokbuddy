@@ -112,7 +112,23 @@ async def test_authenticated_writeback_correlation_replay_and_artifact_scope(flo
         artifact = await client.get(path + '/artifacts/' + profile_id, headers=headers)
         assert artifact.status_code == 200
         assert hashlib.sha256(artifact.content).hexdigest() == artifact.headers['x-content-sha256']
+        materials = request.json()['review_materials']
+        assert materials == (await client.get(path + '/materials', headers=headers)).json()['artifacts']
+        for label in ('original_task', 'approved_plan', 'diff_artifact'):
+            item = materials[label]
+            response = await client.get(path + '/artifacts/' + item['artifact_id'], headers=headers)
+            assert response.status_code == 200
+            assert hashlib.sha256(response.content).hexdigest() == item['sha256']
+        for item in materials['test_results']:
+            response = await client.get(path + '/artifacts/' + item['artifact_id'], headers=headers)
+            assert response.status_code == 200
+            assert hashlib.sha256(response.content).hexdigest() == item['sha256']
+        unrelated = flow.artifact('EVIDENCE')['id']
+        assert (await client.get(path + '/artifacts/' + unrelated, headers=headers)).status_code == 403
         assert (await client.get(path + '/artifacts/ART-outside', headers=headers)).status_code == 403
+        schema = await client.get('/reviewer/contracts/review-result.schema.json', headers=headers)
+        assert schema.status_code == 200 and schema.json()['$id'] == 'urn:collab:result:v1'
+        assert (await client.get('/docs/contracts/review-result.schema.json', headers=headers)).status_code == 404
         assert (await client.get(f'/reviewer/requests/{old_rr}', headers=headers)).status_code == 403
 
         event = synthetic_event(flow, new_rr)
@@ -129,8 +145,28 @@ async def test_authenticated_writeback_correlation_replay_and_artifact_scope(flo
         wrong_correlation = json.loads(json.dumps(event))
         wrong_correlation['correlation_id'] = old_rr
         wrong_correlation['deduplication_key'] += ':wrong-correlation'
-        assert (await client.post('/reviewer/events', json=wrong_correlation, headers=headers)).status_code == 202
+        wrong_receipt = await client.post('/reviewer/events', json=wrong_correlation, headers=headers)
+        assert wrong_receipt.status_code == 202 and wrong_receipt.json()['status'] == 'READY'
         assert flow.r.events.handle_one() == 'REJECTED'
+        status = await client.get('/reviewer/ingress/' + wrong_receipt.json()['ingress_id'], headers=headers)
+        assert status.status_code == 200
+        assert status.json()['status'] == 'REJECTED'
+        assert status.json()['error_code'] == 'VALIDATION_FAILURE'
+        assert status.json()['field_path'] is None
+
+        invalid = json.loads(json.dumps(event))
+        invalid['event_id'] = uid('EVT')
+        invalid['deduplication_key'] += ':invalid-contract'
+        del invalid['payload']['summary']
+        invalid_receipt = await client.post('/reviewer/events', json=invalid, headers=headers)
+        assert invalid_receipt.status_code == 202
+        assert flow.r.events.handle_one() == 'REJECTED'
+        invalid_status = await client.get('/reviewer/ingress/' + invalid_receipt.json()['ingress_id'],
+                                          headers=headers)
+        assert invalid_status.status_code == 200
+        assert invalid_status.json()['error_code'] == 'VALIDATION_FAILURE'
+        assert invalid_status.json()['field_path'] == '$.summary'
+        assert invalid_status.json()['field_path_source'] == 'CURRENT_SCHEMA_REVALIDATION'
 
         receipt = await client.post('/reviewer/events', json=event, headers=headers)
         assert receipt.status_code == 202

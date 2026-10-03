@@ -76,6 +76,9 @@ Phase 0–2 表为 actors/tasks/task_events/review_requests/review_rounds/review
 
 Profile 正式运行数据在 Hub `review_profiles`，`infrastructure/profiles.py` 是唯一 seed 规则源。已存在 name/version 的 hash 与 seed 不同会阻止启动，要求新版本；RR 保存 task-scoped Profile 快照。Schema 直接读已审阅的 `docs/contracts/`，没有复制另一套协议文件。
 
+Profile 现支持追加 1.1 通用审核规则，所有入口默认仍为 1.0；仅新任务显式选择后冻结使用。
+版本注册、Reviewer 指令、案例库和未验证边界见 [Profile 1.1 试用说明](REVIEW_PROFILE_V1_1.md)。
+
 ## 事务与恢复
 
 - Request：RR+round+Task+Audit+Outbox+command receipt 原子提交；不会在事务里调用 Reviewer。

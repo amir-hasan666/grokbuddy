@@ -1,5 +1,11 @@
 # WorkBuddy 接入验证与设计
 
+## 当前状态入口（2026-10-02）
+
+本地交接优化新增 `submit_plan.supporting_artifact_ids`、只读 `preflight_final_review`，并将终审材料检查放在状态推进前。实现、外部接入提示词与未部署边界见 [审核交接优化记录](REVIEW_HANDOFF_OPTIMIZATION_20261002.md)。不改变下文历史结论或 V1 审核轮次。
+
+当前正式拓扑和验收边界统一见 [Current Production Baseline](CURRENT_PRODUCTION_BASELINE.md)，本次文档与回归证据见 [2026-10-02 记录](MAINTENANCE_DOCS_REGRESSION_20261002.md)。历史 [6.20 正式核心链报告](PHASE6_STEP6_20_REAL_FINAL_E2E_REPORT.md) 已为 PASS；以下 2026-09-22 / 2026-09-21 小节保留接线问题及修复语境，不再表示当前 6.20 仍等待重测。该历史 PASS 不关闭新定义 6.21/6.22，也不证明 WorkBuddy 在普通需求下已能持续完成全部 V1 分支。
+
 ## Phase 6.20 ingress owner / Hub Builder 驱动边界（2026-09-22）
 
 6.20 首次真机推进暴露的阻断不是点火或 Worker claim 问题：正式 SoT `var/github-manual/hub.db` 中的 Task 已由专用 `workbuddy-ingress` 正确创建，`owner_id=workbuddy-ingress`、协议 v2、trigger anchors 齐全；但普通 `grokbuddy-hub` 固定以 `builder` 调用 Plan/Final Application 命令，旧 `task_for()` 把 `owner_id` 同时当作创建者和唯一驱动者，因此正确身份的 Hub Builder 被误拒为 `Task belongs to another Builder`。把 Worker legacy claim 打开或修改 `Task.owner_id` 都不是修复。
@@ -12,7 +18,7 @@ Application 层现将两种语义分开：
 - 权限仍经原 `task_for()` 进入所有 Builder Application 命令，所以 Plan/Final Artifact、Plan 提交、Review 请求、Finding 响应、自检、Final package 和需要的治理动作保留同一 CAS/Audit/状态机路径；未新增旁路、第二事实源或 sticky conversation 授权。
 - Plan PASS 后，Hub Builder 仍通过正式 `PLAN_APPROVED → EXECUTING` 命令原子创建 v2 `worker_assignments`；Worker claim/progress/complete 使用 assignment version/lease/CAS，legacy `NEW + owner transfer` 默认继续拒绝。Supervisor 的 outbox、intake、event APPLY 不读取 `owner_id`，本地同 Task Plan→Worker→Final→DONE 用例覆盖了这一点。
 
-仓内隔离测试现为 `LOCAL PASS`，真实 WorkBuddy 6.20 尚未重跑，因此状态只能是 `WAITING HUMAN RETEST`。Human 若保留原 Task，可在同 conversation 继续短句；也可先 Abort 再以新的精确 trigger 建单。期望 `submit_plan` 不再出现 owner 拒绝，随后产生 Plan RR、v2 assignment、Final RR，并以 Hub DB/Audit 为证；Human 重测前不得把 6.20 标记为 PASS。完整差距、命令和证据见 [Ingress Builder Drive 报告](PHASE6_INGRESS_BUILDER_DRIVE_UNBLOCK_REPORT.md)。
+截至本小节的 2026-09-22 接线修复时，仓内隔离测试为 `LOCAL PASS / WAITING HUMAN RETEST`，完整当时差距与证据见 [Ingress Builder Drive 报告](PHASE6_INGRESS_BUILDER_DRIVE_UNBLOCK_REPORT.md)。后续正式核心链结果以 [6.20 报告](PHASE6_STEP6_20_REAL_FINAL_E2E_REPORT.md) 的 PASS 为准；不再要求为关闭这一历史问题而重投旧 Task 或重跑 6.20。
 
 ## Phase 6 trigger ingress 接线（2026-09-21）
 
@@ -88,6 +94,7 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 | submit_plan | task_id、plan_artifact_id、approved_scope、expected_version、idempotency_key | task snapshot |
 | request_plan_review | task_id、expected_version、idempotency_key | RR ID、PENDING |
 | get_plan_review | RR ID | RR status、result/null |
+| get_plan_review_readiness | task_id | 只读方案 Finding、Task version、剩余轮次与整改准备提示；不创建 RR |
 | respond_to_review | task_id、review_id、finding_id、action、证据、version、key | Finding 收据；不自动重审 |
 | submit_artifact | task_id、type、text/base64、key | immutable artifact metadata |
 | request_final_review | task、测试/差异 Artifact、final package 摘要、version、key | RR ID、PENDING |
@@ -96,6 +103,16 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 | close_task | task_id、reason、version、key | Human audit + CANCELLED |
 
 `request_plan_review` / `request_final_review` 只提交 durable request 并返回 `PENDING`；完成结果只能通过 `get_*` 查询。相同 command idempotency key 在 stdio 进程重启后返回同一 Task/ReviewRequest，不创建新轮次。
+
+### 方案 R1 Finding 整改与 R2 准备（2026-10-02，本地维护）
+
+仓内新增独立 [方案整改技能](workbuddy-skills/grokbuddy-plan-remediation/SKILL.md)。安装或更新 WorkBuddy 用户 skill 需按本机既有操作完成；仓内文件存在不代表 WorkBuddy 已加载，新增 MCP tool 也需客户端重新连接到更新后的服务。本文记录本地实现，不声明已部署或真实 WorkBuddy/GrokBot 验收通过。
+
+Builder 的方案整改顺序为：读取 R1 结果与当前 Finding → `respond_to_review(accept)` → 一次修订并上传 PLAN → 上传逐项修复 EVIDENCE → `submit_plan` 显式绑定 `supporting_artifact_ids` → `respond_to_review(fix)` → 准备度查询 → `request_plan_review`。使用原 R1 `review_id` 和稳定 `finding_id`；每次写命令都绑定 Task 最新版本和独立幂等键。Builder fix 可使用 `DIFF/EVIDENCE/TEST_RESULT`，但当前方案 supporting materials 只接收 `SOURCE_FILE/EVIDENCE`，因此要让 Reviewer 阅读的修复说明使用 EVIDENCE 并在提交方案时绑定。PLAN Artifact 本身不能充当 Builder fix 证据。方案 fix 保持 `PLANNING`，不执行代码、不创建 Worker assignment；状态、证据、身份、活动 RR 冻结与 CAS 守卫继续由 Application 执行。
+
+`get_plan_review_readiness` 是固定 Builder/Task 权限内的只读查询，不加入公开 Remote MCP 查询面，不写 Audit、Finding、Task、outbox 或轮次。它返回本阶段 Finding 的 `review_id/current_status/finding_version/next_action`、`expected_task_version`、`active_rr_id`、`rounds_remaining` 与 `checks`。`can_request_review` 表示读取时的基本请求条件；`ready_for_review` 还要求没有需 Builder 回应的 OPEN/ACCEPTED 项，且 FIXED 项的证据已明确绑定到当前 Plan 材料。`unbound_fix_evidence` 报告缺少的绑定；它只检查引用，不代替实际取件、哈希和内容核验。两个 readiness 值都不是 Review verdict、请求授权或预留轮次；实际命令重新校验。准备提示不阻止合法的、仍有未解决实质问题的 R2 BLOCK 评审，不新增一刀切请求守卫。
+
+活动 RR 期间只查询。FIXED/REJECTED_WITH_EVIDENCE 等待独立 Reviewer 的 verification，仍属未关闭项；修改方案不会自动 FIXED，FIXED 不会自动 PASS。R2 已超时则保留旧 RR 和 Human Gate；现行 V1 合同没有同 Task 的“新 R2”，也不允许 Continue/Modify/预算自动形成 R3。
 
 `submit_plan` 的 `approved_scope` 是必填的非空结构化对象，只允许 `summary`、`files`、`components`；至少提供一项，`files/components` 如出现则必须是非空字符串数组。Plan Artifact 上传时 `artifact_type` 必须使用大写 `PLAN`。MCP 调用示例：
 

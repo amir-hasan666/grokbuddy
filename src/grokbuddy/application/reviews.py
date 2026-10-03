@@ -53,7 +53,13 @@ class ReviewService(Services):
             profile = repo.get('review_profiles', task['profile'] + '@' + task['profile_version'])
             profile_artifact = self.add_artifact(repo, task_id, actor, 'SOURCE_FILE', canonical(profile['rules']))
             findings = repo.find('review_findings', task_id=task_id)
-            context = self.add_artifact(repo, task_id, actor, 'SOURCE_FILE', canonical({'findings': findings}))
+            context_value = {'findings': findings}
+            if plan and task.get('current_plan_material_refs'):
+                context_value['supporting_artifacts'] = task['current_plan_material_refs']
+                for item in context_value['supporting_artifacts']:
+                    self.artifact(repo, task_id, item['artifact_id'], item['sha256'],
+                                  {'SOURCE_FILE', 'EVIDENCE'})
+            context = self.add_artifact(repo, task_id, actor, 'SOURCE_FILE', canonical(context_value))
             request_id, review_id = uid('RR'), uid('REV')
             timeout = self.settings.plan_review_timeout if plan else self.settings.final_review_timeout
             deadline = min(task['deadline_at'], self.clock.now() + timeout * 1_000_000)

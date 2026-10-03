@@ -1,6 +1,10 @@
-PHASE6-SUPERVISOR-PRODUCTION-WIRING: LOCAL PASS / WAITING HUMAN RESTART
+当前状态入口：[Current Production Baseline](CURRENT_PRODUCTION_BASELINE.md)（2026-10-02 文档核对）
 
 # Phase 6 Windows Operations Runbook
+
+2026-10-02 本地交接优化新增完整 schema bundle、结果/材料预检和接纳回执，见 [审核交接优化记录](REVIEW_HANDOFF_OPTIMIZATION_20261002.md)。这些接口需要正式进程加载本次代码后才生效，本地检查不构成部署或外部规则生效证据。
+
+本文件首行原标记 `PHASE6-SUPERVISOR-PRODUCTION-WIRING: LOCAL PASS / WAITING HUMAN RESTART` 属于早期接线阶段；原历史结果保留在 [Supervisor production wiring report](PHASE6_SUPERVISOR_PRODUCTION_WIRING_REPORT.md)。后续正式运行与尚缺验收以当前生产基线为准，不能把旧等待重启状态当作当前操作要求。
 
 正式 PublicBase 固定为 `https://grokbuddy.amirhasan.top`，本地 origin 固定为 `http://127.0.0.1:8788`。根路径 `GET /` 的预期是 HTTP 404 与 `{"error":"not_found"}`；不得为健康检查增加假首页。本文只覆盖 Windows 运行、恢复与验收，不授权 GitHub/Grok 外站修改或 6.20 E2E。
 
@@ -9,7 +13,7 @@ PHASE6-SUPERVISOR-PRODUCTION-WIRING: LOCAL PASS / WAITING HUMAN RESTART
 - 非敏感运行配置：`config/grokbuddy.service.json`。
 - 正式 Secret Source 是当前登录用户的 Windows Credential Manager Generic Credential（`CRED_TYPE_GENERIC`）。`Get-GrokBuddyCredential.ps1` 只通过 `CredReadW` 读取，并始终用 `CredFree` 释放原生缓冲区。
 - 五个基础 Target 为 `GrokBuddy/GITHUB_WEBHOOK_SECRET`、`GrokBuddy/GROKBUDDY_MCP_TOKEN`、`GrokBuddy/GROKBUDDY_GROK_REVIEWER_TOKEN`、`GrokBuddy/GROKBUDDY_TRIGGER_SOURCE_KEY`、`GrokBuddy/GITHUB_COMMENT_TOKEN`。最后一项只用于正式 Supervisor 的普通 GitHub Comment 请求载体与 Final projection；Trigger Source Key 还必须不少于 32 UTF-8 bytes。任一基础项 missing、empty、过短或 unreadable 都 fail closed，不启动 Hub。
-- Reviewer webhook wake 默认关闭：`reviewerWakeWebhookUrlEnv` 与 `reviewerWakeWebhookKeyEnv` 在 service config 中均为空。启用时必须同时配置两个非敏感环境变量名，并在当前登录用户的 Credential Manager 中增加 `GrokBuddy/REVIEWER_WAKE_WEBHOOK_URL` 与 `GrokBuddy/REVIEWER_WAKE_WEBHOOK_KEY`；任一可选项缺失或不合法都 fail closed。URL 与 key 的值不得进入 service JSON、命令行、日志、报告或 Git。
+- Reviewer webhook wake 未配置时默认关闭；当前 service config 已将 `reviewerWakeWebhookUrlEnv` / `reviewerWakeWebhookKeyEnv` 配置为非敏感环境变量名 `GROKBUDDY_REVIEWER_WAKE_WEBHOOK_URL` / `GROKBUDDY_REVIEWER_WAKE_WEBHOOK_KEY`。启用时还须由当前计划任务用户的 Credential Manager 提供 `GrokBuddy/REVIEWER_WAKE_WEBHOOK_URL` 与 `GrokBuddy/REVIEWER_WAKE_WEBHOOK_KEY`；任一项缺失或不合法都 fail closed。本次文档核对未读取或修改凭证；URL 与 key 的值不得进入 service JSON、命令行、日志、报告或 Git。
 - `Start-GrokBuddyHub.ps1` 只把值注入 launcher/Hub 的 Process 环境。禁止 `setx`，禁止 User/Machine 环境持久化，禁止把值写入 JSON、任务参数、Git、日志或报告。
 - `var/service/hub-secrets.clixml` 被 Git 忽略并保留，但已退出正式启动链路。安装、启动和卸载脚本均不读取、覆盖或删除它。
 
@@ -152,6 +156,10 @@ Get-NetTCPConnection -State Listen -LocalPort 8788
 ### 8.1 启用与 Secret 注入
 
 wake 只是“队列已有新 RR”的尽力通知，不携带完整 Review，不提交 verdict，也不替代认证的 `GET /reviewer/requests` 与 `POST /reviewer/events`。POST body 只有固定事件名与 `review_request_id`；sender key 只放在 HTTPS `Authorization: Bearer ...` header，稳定去重值放在 `Idempotency-Key` header。
+
+Reviewer 专用 Bearer 还可只读访问 `GET /reviewer/requests/<RR>/materials`：返回该 RR 的 profile、冻结 input、context、所属 Task 的 Human 原始需求与触发材料，以及 Final 封装包引用的 approved Plan、diff、test_results、generated_files 的 `artifact_id`/`sha256`。`GET /reviewer/requests/<RR>/artifacts/<ART>` 仅放行这些经 Hub 校验且属于该 Task 的引用；同 Task 其他材料及跨 Task 材料均拒绝。终态 RR 的材料可供审计取阅，但普通 `GET /reviewer/requests/<RR>` 仍仅对当前有效 RR 开放，不得借取阅重投结果。`GET /reviewer/contracts/review-result.schema.json` 返回当前结果 schema。
+
+`POST /reviewer/events` 的 `202 READY` 仅表示入箱；之后用 `GET /reviewer/ingress/<IN>` 查询该次提交的 `status`、`error_code` 和 `field_path`。历史记录未保存字段路径时，若当前 schema 能定位错误，响应的 `field_path_source=CURRENT_SCHEMA_REVALIDATION`；它是只读重新校验的诊断，不替代历史 Audit 或当时的拒绝记录。`field_path=null` 表示没有可定位的 schema 字段，例如语义绑定校验失败。
 
 Human 先在当前计划任务用户的 Windows Credential Manager 中创建两个 Generic Credential：
 

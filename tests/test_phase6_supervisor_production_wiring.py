@@ -295,6 +295,59 @@ def test_unbound_v2_plan_is_durably_delivered_on_reviewer_http_queue(
     assert runtime.hub.get_review(request_id)['request']['status'] == 'PENDING'
 
 
+def test_reviewer_reads_trigger_and_original_only_for_own_rr(tmp_path):
+    import hashlib
+
+    runtime = LocalRuntime(
+        tmp_path / 'reviewer-material-scope', CONTRACTS,
+        clock=ManualClock(), trigger_source_key=TRIGGER_KEY,
+        default_reviewer_actor_id=B_ACTOR,
+    )
+    register_b(runtime)
+    builder, planned = planned_unbound_v2_task(runtime)
+    rr = builder.invoke('request_plan_review', {
+        'task_id': planned['id'],
+        'expected_version': planned['version'],
+        'idempotency_key': str(uuid4()),
+    })['review_request_id']
+    intake = runtime.grok_intake(B_ACTOR)
+    dispatcher = runtime.grok_dispatcher(
+        FileGitHubCommentTransport(tmp_path / 'unused.json'), B_ACTOR,
+        'https://grokbuddy.amirhasan.top', intake=intake)
+    assert dispatcher.dispatch_one() == 'SENT'
+    app = GrokReviewerApplication(runtime, dispatcher.adapter, REVIEWER_TOKEN, intake=intake)
+    task = runtime.hub.get_task(planned['id'])
+    _, other = planned_unbound_v2_task(runtime)
+    other_artifact = runtime.hub.get_task(other['id'])['original_task_id']
+
+    async def check():
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app),
+                                      base_url='https://grokbuddy.amirhasan.top') as client:
+            headers = {'authorization': 'Bearer ' + REVIEWER_TOKEN}
+            path = f'/reviewer/requests/{rr}'
+            materials = (await client.get(path, headers=headers)).json()['review_materials']
+            assert materials['original_task']['artifact_id'] == task['original_task_id']
+            assert materials['trigger']['artifact_id'] == task['trigger_evidence']['source_artifact_id']
+            for label in ('original_task', 'trigger'):
+                item = materials[label]
+                response = await client.get(path + '/artifacts/' + item['artifact_id'], headers=headers)
+                assert response.status_code == 200
+                assert hashlib.sha256(response.content).hexdigest() == item['sha256']
+            assert (await client.get(path + '/artifacts/' + other_artifact, headers=headers)).status_code == 403
+            assert (await client.get(path + '/materials')).status_code == 401
+
+            runtime.clock.advance(runtime.settings.plan_review_timeout + 1)
+            assert runtime.timeouts.sweep() == 1
+            assert (await client.get(path, headers=headers)).status_code == 403
+            historical = await client.get(path + '/materials', headers=headers)
+            assert historical.status_code == 200 and historical.json()['request_status'] == 'TIMED_OUT'
+            old_material = await client.get(
+                path + '/artifacts/' + materials['original_task']['artifact_id'], headers=headers)
+            assert old_material.status_code == 200
+
+    anyio.run(check)
+
+
 def test_http_delivery_reconciles_publish_before_outbox_sent(tmp_path):
     runtime = LocalRuntime(
         tmp_path / 'http-publish-recovery', CONTRACTS,

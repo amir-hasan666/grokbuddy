@@ -4,7 +4,7 @@ Collaboration Hub 是一个长期可维护、可审计的多主体协作控制�
 
 ## Current status
 
-V1 的 11 条冻结需求、5 个 blocker、6 个 V1.1 reliability backlog 与 6.21/6.22 新定义见 [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md)。当前生产事实、历史 Gate 结果见 [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md)。文档范围重定义不代表产品实现或验收 PASS。
+V1 的 11 条冻结需求、冻结时识别的 5 个 blocker 工作项、6 个 V1.1 reliability backlog 与 6.21/6.22 新定义见 [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md)。当前生产事实、后续实现进展与验收缺口见 [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md)。文档范围重定义不代表产品实现或验收 PASS。
 
 ## 核心边界
 
@@ -33,12 +33,13 @@ flowchart LR
 | 入口 | 说明 |
 | --- | --- |
 | [AGENTS.md](AGENTS.md) | 长期控制面、安全边界与工作规则 |
-| [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md) | Human 冻结的 11 条产品需求、当前 blocker/backlog 和 6.21/6.22 新 Exit Gate |
+| [V1 Product Path and Scope Reset](docs/PRODUCT_PATH_V1.md) | Human 冻结的 11 条产品需求、冻结时 blocker/backlog 分类和 6.21/6.22 新 Exit Gate |
 | [Current Production Baseline](docs/CURRENT_PRODUCTION_BASELINE.md) | 可变的当前阶段、正式生产入口、部署事实、开放门禁与证据指针 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 分层、事务与 adapter 边界 |
 | [DATA_MODEL.md](DATA_MODEL.md) | 逻辑数据模型、键与约束 |
 | [STATE_MACHINE.md](STATE_MACHINE.md) | 状态迁移与并发/迟到事件规则 |
 | [REVIEW_PROTOCOL.md](REVIEW_PROTOCOL.md) / [contracts](docs/contracts/) | 审核语义与机器可读协议 |
+| [Profile 1.1 试用](docs/REVIEW_PROFILE_V1_1.md) | 通用审核规则、显式选用新版本、Reviewer 指令和跨类型案例；默认仍为 1.0 |
 | [SECURITY.md](SECURITY.md) | 身份、Secret、审批与生产安全 |
 | [Source of Truth](docs/SOURCE_OF_TRUTH.md) | Hub 与外部投影边界 |
 | [Windows Operations Runbook](docs/PHASE6_OPERATIONS_RUNBOOK.md) | 正式 Windows 启动、恢复、健康检查与运维步骤 |

@@ -237,6 +237,7 @@ def test_ingress_owner_is_preserved_while_configured_builder_drives_plan_to_done
 
     test_artifact = upload(builder, task_id, 'TEST_RESULT', 'Focused tests passed')
     diff_artifact = upload(builder, task_id, 'DIFF', 'Bounded local diff')
+    source_artifact = upload(builder, task_id, 'SOURCE_FILE', 'Bounded local implementation')
     final_receipt = builder.invoke('request_final_review', {
         'task_id': task_id,
         'test_artifact_id': test_artifact['id'],
@@ -246,9 +247,14 @@ def test_ingress_owner_is_preserved_while_configured_builder_drives_plan_to_done
         'begin_execution': False,
         'change_scope': 'Ingress Builder drive isolation',
         'changed_files': ['local.txt'],
+        'operation_method': 'Read local.txt as the bounded local output.',
+        'generated_files': [{
+            'path': 'local.txt',
+            'artifact_id': source_artifact['id'],
+        }],
         'self_test_summary': 'Focused tests passed',
         'known_risks': [],
-        'unverified_items': ['Real WorkBuddy 6.20 Human retest remains pending'],
+        'unverified_items': ['This local mock regression does not exercise real WorkBuddy interaction'],
     })
     runtime.mock.configure(final_receipt['review_request_id'], 'PASS')
     runtime.supervisor().run_until_idle()

@@ -1,0 +1,85 @@
+{
+  "protocol_version": "v2",
+  "task_id": "TASK-10000000-0000-4000-8000-000000000001",
+  "review_request_id": "RR-20000000-0000-4000-8000-000000000001",
+  "review_id": "REV-30000000-0000-4000-8000-000000000001",
+  "review_type": "PLAN_REVIEW",
+  "review_round": 1,
+  "content_revision": 1,
+  "expected_task_version": 3,
+  "decision_policy_version": "grokbuddy-v1-dual-round",
+  "review_profile": "generic",
+  "review_profile_version": "1.1",
+  "profile_sha256": "56f5d3dafb6cd5868462db0dba71bf289ba4e9621071944bb42caff361c8cd2e",
+  "input_sha256": "3e5f0f3aa51d6024f2dfd0f135ff480c91b5b769648b0ee095deb9939539dee0",
+  "verdict": "NEEDS_CHANGES",
+  "summary": "离线格式样例：方案需要修订。临时目录复制超出声明的写入边界；影响评分和排除结论缺少对应证据。样例不代表真实 Reviewer 执行。",
+  "reviewer": {
+    "type": "mock",
+    "id": "mock-reviewer"
+  },
+  "timestamp": "2026-09-24T00:00:00Z",
+  "evidence": [
+    {
+      "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+      "locator": "2.2 P7；5 文件系统只读；4 排序口径；7 已排除项",
+      "description": "计划会自动复制到系统临时目录，同时只允许 output/ 写入；低分和低置信被直接列作不影响速度。"
+    }
+  ],
+  "risks": [],
+  "recommendations": [],
+  "proposed_changes": [],
+  "findings": [
+    {
+      "external_finding_key": "sample-write-boundary",
+      "severity": "HIGH",
+      "blocking": true,
+      "category": "SECURITY",
+      "title": "自动复制与写入范围冲突",
+      "description": "中文路径触发 P7 自动复制到临时目录，违反第 5 节仅 output/ 写入约束。",
+      "evidence": {
+        "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+        "locator": "2.2 P7；5 文件系统只读",
+        "description": "这两处设计给出的运行期写入范围不一致。"
+      },
+      "impact": "按方案实现将产生未允许的目录外写入。",
+      "recommendation": "改为启动前路径检查并在不满足时退出，或取得明确范围修订。关闭标准：所有设计章节中的运行写入范围一致且无自动目录外复制。",
+      "proposed_changes": [
+        "统一启动路径处理与文件写入边界。"
+      ],
+      "scope": {
+        "components": [
+          "启动与文件系统边界"
+        ]
+      },
+      "status": "OPEN",
+      "actionable": true
+    },
+    {
+      "external_finding_key": "sample-attribution-evidence",
+      "severity": "HIGH",
+      "blocking": true,
+      "category": "CORE_REQUIREMENT",
+      "title": "排序和排除结论超出量化证据",
+      "description": "rank_score 是加权估算分数，未定义真实贡献比例的分母；低分或无二次证据被写成已排除。",
+      "evidence": {
+        "artifact_id": "ART-40000000-0000-4000-8000-000000000001",
+        "locator": "4 影响因子模型；7 已排除项",
+        "description": "阈值或低置信本身不足以证明因素不影响终端。"
+      },
+      "impact": "核心报告可能将启发式排序当作真实贡献并遗漏有影响的因素。",
+      "recommendation": "明确指标口径、分母和估计边界，分开未知与已排除。关闭标准：只能用有效证据支撑贡献和排除结论，无依据时标注未知。",
+      "proposed_changes": [
+        "修订指标和报告语义及反例验证。"
+      ],
+      "scope": {
+        "components": [
+          "归因与报告"
+        ]
+      },
+      "status": "OPEN",
+      "actionable": true
+    }
+  ],
+  "verifications": []
+}

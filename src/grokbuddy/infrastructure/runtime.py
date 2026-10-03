@@ -24,7 +24,7 @@ from grokbuddy.application.grok_routing import (GrokRoutingService,
                                                 grok_delivery_contract_matches)
 from grokbuddy.application.common import digest, iso
 from .clock import SystemClock
-from .profiles import PROFILE_RULES
+from .profiles import PROFILE_RULE_VERSIONS
 
 
 class Hub(TaskService, WorkerTaskService, ReviewService, FindingService, GovernanceService, GrokRoutingService):
@@ -112,13 +112,15 @@ class LocalRuntime:
                 repo.add('actors', ingress)
             elif old_ingress[0] != ingress:
                 raise Conflict('WorkBuddy ingress principal configuration changed unexpectedly')
-            for name, rules in PROFILE_RULES.items():
-                record = dict(id=name + '@1.0', name=name, version='1.0', rules=rules, sha256=digest(rules))
-                old = repo.find('review_profiles', id=record['id'])
-                if not old:
-                    repo.add('review_profiles', record)
-                elif old[0]['sha256'] != record['sha256']:
-                    raise Conflict('Profile rules changed without a new version')
+            for version, profiles in PROFILE_RULE_VERSIONS.items():
+                for name, rules in profiles.items():
+                    record = dict(id=name + '@' + version, name=name, version=version,
+                                  rules=rules, sha256=digest(rules))
+                    old = repo.find('review_profiles', id=record['id'])
+                    if not old:
+                        repo.add('review_profiles', record)
+                    elif old[0]['sha256'] != record['sha256']:
+                        raise Conflict('Profile rules changed without a new version')
 
     def tick(self):
         """One bounded local worker iteration, explicitly invoked after request submission."""

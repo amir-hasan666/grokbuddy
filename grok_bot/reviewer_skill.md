@@ -4,6 +4,11 @@
 
 下文第 1–8 节保留 Phase 4 的 v1 草案语境；当前 V1/v2 结果构造补充见第 9 节。此补充不表示外部 Reviewer 已更新或正式部署。
 
+Profile 1.1 的通用审核试用入口见 [Reviewer 1.1 指令](reviewer_rules_v1_1.md)，
+版本注册与试用方法见 [Profile 1.1 说明](../docs/REVIEW_PROFILE_V1_1.md)。
+它只对显式冻结 1.1 的新任务适用，不把本文件历史 Phase 4 限制当作当前部署事实，
+也不追溯改变 1.0 任务或历史 Review。
+
 ## 1. 用途与权限
 
 仅在 Hub 已创建并冻结一个 `PENDING` ReviewRequest，且后续受控测试明确授权时，独立 Reviewer B 才可执行一次 Plan 或 Final 审核。
@@ -108,3 +113,5 @@ Schema 通过只证明结构有效。Hub 仍须验证认证 actor、A != B、req
 当前 v2 Reviewer 必须以 Hub 冻结的 RR envelope 构造结果。对带有 `decision_policy_version` 的 V1 RR，把该字段从 envelope **原值回显**到结果顶层；缺失时停止生成合法 V1/v2 结果，不从 Task、常量、旧结果或自然语言补猜。`expected_task_version` 等冻结字段同样从 envelope 回显。Reviewer 发送前须以 `docs/contracts/review-result.schema.json#/$defs/v2Result` 验证 V1/v2 结果；该分支要求 `decision_policy_version=grokbuddy-v1-dual-round`。旧 v2 RR 若 envelope 无该字段，使用 schema 的 `legacyV2Result` 分支，不给旧结果添加新政策版本。
 
 Hub APPLY 仍将结果与冻结 RR 逐字段核对；结果缺键或值不等必须拒绝。仓内 `grokbuddy.adapters.review_result_fields.frozen_result_fields` 是字段复制的参考实现，不代表外部 Reviewer 已加载该代码。
+
+当前取件与回执接口见 [Windows Operations Runbook](../docs/PHASE6_OPERATIONS_RUNBOOK.md)。结果 schema 使用 `urn:collab:common:v1` 引用；完整校验须加载公共依赖并启用 date-time 格式检查。2026-10-02 仓内新增认证 `GET /reviewer/contracts` schema bundle、取件 `result_bindings`、只读 `validate-result` 和材料字节检查；接入步骤与尚未部署的边界见 [审核交接优化](../docs/REVIEW_HANDOFF_OPTIMIZATION_20261002.md)。`202 READY` 仅为入箱，须查询 ingress 的 `accepted_review` 和 Hub 状态确认接纳；预检通过不代表裁决已生效。
