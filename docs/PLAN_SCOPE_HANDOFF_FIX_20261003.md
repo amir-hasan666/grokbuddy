@@ -1,6 +1,8 @@
 # Plan scope handoff repair — 2026-10-03
 
-Status: **LOCAL FIX COMPLETE; FULL LOCAL REGRESSION PASS; NOT DEPLOYED**.
+Local closeout status before formal release: **LOCAL FIX COMPLETE; FULL LOCAL REGRESSION PASS; NOT DEPLOYED**.
+
+Subsequent authorized [production release](PRODUCTION_SCOPE_FINAL_FIX_RELEASE_20261003.md) loaded commit b9580f4 into the formal Hub at 14:31 on the same date and verified the new schema definition. External rule synchronization, WorkBuddy MCP reload and real new-RR acceptance remain pending. The following local validation and implementation record is preserved.
 
 Human authorized repository maintenance only: scope semantics, frozen scope/hash material, preparation diagnostics and regression coverage. No business Task mutation, production deployment/restart, credential change or external Reviewer call is authorized by this record.
 

@@ -1,6 +1,8 @@
 # Final-fix client repair — 2026-10-03
 
-Status: **LOCAL FIX COMPLETE; FULL LOCAL REGRESSION PASS; NOT DEPLOYED**.
+Local closeout status before formal release: **LOCAL FIX COMPLETE; FULL LOCAL REGRESSION PASS; NOT DEPLOYED**.
+
+Subsequent authorized [production release](PRODUCTION_SCOPE_FINAL_FIX_RELEASE_20261003.md) loaded commit b9580f4 into the formal Hub at 14:31 on the same date. WorkBuddy MCP reload and real Task remediation remain unverified. The following local validation and implementation record is preserved.
 
 Human authorized this repository repair after WorkBuddy reported a blocked Final R1 remediation on `TASK-84255b22-cd5c-487f-b2be-c8b9dbbbb7bd`. The business report is context, not proof of its current Task state or Final acceptance. This maintenance does not mutate that Task, submit its reviews, deploy/restart services or change credentials.
 
