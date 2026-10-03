@@ -1,6 +1,6 @@
 # Current Production Baseline
 
-Last updated: 2026-10-03 Asia/Shanghai (external-rule reports and local Skill reconciliation; no deployment/restart in this maintenance)
+Last updated: 2026-10-03 Asia/Shanghai (authorized unified release at 10:48; read-only HTTP and runtime verification)
 
 This file is a mutable pointer to the current production baseline.
 It is not historical evidence and must not rewrite or supersede the
@@ -14,9 +14,9 @@ recorded facts in dated Phase reports.
 - The old [6.21 Negative E2E report](PHASE6_STEP6_21_NEGATIVE_E2E_REPORT.md) remains historical `IN PROGRESS / PARTIAL / BLOCKED`; its A–I matrix is no longer the V1 Exit Gate. New 6.21 means V1 product workflow acceptance; new 6.22 means V1 practical usability acceptance. Both remain open and have not been run under the new definitions.
 - Same-RR re-wake remains `IMPLEMENTED + LOCAL REGRESSION PASS / NOT PRODUCTION VALIDATED` and is V1.1 reliability backlog, not a V1 blocker absent proof that normal webhook flow requires it.
 
-## Current implementation and verification boundary (2026-10-02)
+## Current implementation and verification boundary (2026-10-03)
 
-The [review handoff maintenance record](REVIEW_HANDOFF_OPTIMIZATION_20261002.md) adds schema dependencies, preflight checks, frozen Plan supporting materials and explicit result receipts in the checkout. The [2026-10-03 integration reconciliation](REVIEW_HANDOFF_INTEGRATION_20261003.md) records Human-supplied WorkBuddy/GrokBot rule updates, including the corrected OPEN/ADVISORY policy, and verified local Skill sources. Codex read-only authenticated GET checks still returned 404 for the schema bundle and validate-result route; result preflight execution remains untested, with no POST performed. The formal service remains ready with database and supervisor OK. No deployment/restart was performed in this maintenance, and these observations do not change the acceptance facts below.
+The [review handoff maintenance record](REVIEW_HANDOFF_OPTIMIZATION_20261002.md) adds schema dependencies, preflight checks, frozen Plan supporting materials and explicit result receipts. The [2026-10-03 integration reconciliation](REVIEW_HANDOFF_INTEGRATION_20261003.md) records Human-supplied WorkBuddy/GrokBot rule updates, including the corrected OPEN/ADVISORY policy, and verified local Skill sources. The earlier pre-release authenticated GET observations returned 404 for the new routes. The separately authorized [2026-10-03 production release](PRODUCTION_REVIEW_HANDOFF_RELEASE_20261003.md) subsequently loaded unified commit `904e51b06b243d7aa9aaa3846bbda8b7464e3d0c`: schema bundle and materials checks return 200, GET of the POST-only validation route returns 405, and ingress diagnostics fields are visible. Result preflight POST execution, actual Finding remediation and external authenticated Reviewer end-to-end use remain untested. These observations do not change the product acceptance facts below.
 
 The [2026-10-02 documentation and regression record](MAINTENANCE_DOCS_REGRESSION_20261002.md) records the current checkout, read-only production observations, local checks and remaining evidence gaps. Earlier dated Phase reports retain their original results.
 
@@ -25,9 +25,9 @@ The [2026-10-02 documentation and regression record](MAINTENANCE_DOCS_REGRESSION
 | V1 dual-round policy | Current contracts and application code implement the frozen policy, R1 direct PASS, per-stage two-round limits and required Final delivery fields. | The complete new-definition 6.21 product scenario set has no consolidated acceptance record. Local tests do not close it. |
 | WorkBuddy workflow | Historical 6.20 establishes its original formal core path. The repository trigger skill still covers intake only. | Ordinary-demand continuous execution through revision, coding and delivery/blocking display under the V1 policy is not established by the historical round-3 Plan. |
 | Control Center | Configured enabled; read-only UI/query code covers requirements, rounds, messages, delivery artifacts, blocked materials and timeline. | A complete real-task field/display/usability acceptance record under new 6.21/6.22 remains absent. It is no longer accurate to say there is no website implementation. |
-| Reviewer materials and receipts | Current code exposes RR-scoped material lists, authorized artifact reads, result-schema GET and ingress-status GET. The 2026-09-30 restart evidence is retained under `var/service/rollback/reviewer-material-access-20260930-125645/`; this maintenance did not restart the Hub. | No new external GrokBot public retrieval, full-material reading or automatic submission/receipt end-to-end trial was run in this maintenance. |
+| Reviewer materials and receipts | The authorized 2026-10-03 release loaded schema bundle, material-byte checks and expanded receipts. Authenticated local HTTP checked 18/18 Plan/Final material references; historical rejection details remain null without backfill. Evidence is under `var/service/rollback/unified-review-handoff-20261003-103931/`; the 2026-09-30 evidence is retained separately. | External authenticated GrokBot retrieval/submission and the full remediation/result-preflight/apply chain remain untested in this release. |
 | Profile 1.1 | Formal DB read-only snapshot contains all six 1.0 and six 1.1 profiles. `TASK-673aaac2-7ad9-4728-b663-c2d003de6015` has real `REVIEWER_HTTP` Plan/Final PASS with frozen 1.1 hashes matching the registered profile. Defaults remain 1.0. | A matching version/hash and Hub APPLY do not establish loading of the external instruction file or substantive review quality. Its historical Final snapshot mentions 403; later access repair does not retroactively qualify that PASS. |
-| Runtime readiness | Local formal GET `/ready` returned `ready`, database `ok`, supervisor `ok` during this maintenance. | Point-in-time readiness does not establish product acceptance or all recovery paths. |
+| Runtime readiness | After the 2026-10-03 controlled restart, local/public health and ready return 200 with database and supervisor OK. The process uses the same configured runtime; all 24 database table record hashes and schema version are unchanged. | Point-in-time readiness does not establish product acceptance or all recovery paths. |
 
 ## Closed gates
 
