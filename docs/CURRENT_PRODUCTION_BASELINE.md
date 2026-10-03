@@ -1,6 +1,6 @@
 # Current Production Baseline
 
-Last updated: 2026-10-03 Asia/Shanghai (authorized unified release at 10:48; read-only HTTP and runtime verification)
+Last updated: 2026-10-03 Asia/Shanghai (production release at 10:48; subsequent local scope and Final-fix changes are not deployed)
 
 This file is a mutable pointer to the current production baseline.
 It is not historical evidence and must not rewrite or supersede the
@@ -19,6 +19,10 @@ recorded facts in dated Phase reports.
 The [review handoff maintenance record](REVIEW_HANDOFF_OPTIMIZATION_20261002.md) adds schema dependencies, preflight checks, frozen Plan supporting materials and explicit result receipts. The [2026-10-03 integration reconciliation](REVIEW_HANDOFF_INTEGRATION_20261003.md) records Human-supplied WorkBuddy/GrokBot rule updates, including the corrected OPEN/ADVISORY policy, and verified local Skill sources. The earlier pre-release authenticated GET observations returned 404 for the new routes. The separately authorized [2026-10-03 production release](PRODUCTION_REVIEW_HANDOFF_RELEASE_20261003.md) subsequently loaded unified commit `904e51b06b243d7aa9aaa3846bbda8b7464e3d0c`: schema bundle and materials checks return 200, GET of the POST-only validation route returns 405, and ingress diagnostics fields are visible. Result preflight POST execution, actual Finding remediation and external authenticated Reviewer end-to-end use remain untested. These observations do not change the product acceptance facts below.
 
 The [2026-10-02 documentation and regression record](MAINTENANCE_DOCS_REGRESSION_20261002.md) records the current checkout, read-only production observations, local checks and remaining evidence gaps. Earlier dated Phase reports retain their original results.
+
+The later [2026-10-03 Plan scope repair](PLAN_SCOPE_HANDOFF_FIX_20261003.md) is **LOCAL FIX COMPLETE / LOCAL REGRESSION PASS / NOT DEPLOYED**. It clarifies future-file allowlists, adds a version-1 scope/hash snapshot to new v2 Plan RR contexts and optional read-only file-coverage diagnostics. External rule synchronization, formal release and real-task acceptance remain pending; no historical Task, RR or approval was modified. It does not change the loaded production release or close 6.21/6.22.
+
+The additional [2026-10-03 Final-fix client repair](FINAL_FIX_MCP_REPAIR_20261003.md) is **LOCAL FIX COMPLETE / FULL LOCAL REGRESSION PASS (961 tests) / NOT DEPLOYED**. It exposes the existing guarded `begin_final_fix` command, removes legacy implicit execute from v2 Finding fixes and enforces the active Final Finding subset. Its remaining release/WorkBuddy acceptance steps are recorded separately. This maintenance does not operate the reported replacement Task or claim that its Final R2 has passed.
 
 | Area | Current evidence | Remaining acceptance evidence |
 | --- | --- | --- |

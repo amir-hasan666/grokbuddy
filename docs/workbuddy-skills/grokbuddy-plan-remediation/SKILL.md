@@ -16,9 +16,11 @@ allowed-tools: mcp__grokbuddy-hub__get_task mcp__grokbuddy-hub__get_plan_review 
 
 1. 读取本方案实际依赖的源码/配置/调查证据，用 `submit_artifact` 上传为当前 Task 的 `SOURCE_FILE`（源码或配置全文）或 `EVIDENCE`（调查结论与依据）。
 2. 调用 `submit_plan` 时把这些制品 ID 放进 `supporting_artifact_ids`，并在计划正文里写明每份材料的用途与位置。
-3. 只绑定**本方案实际需要**的材料，不把整个任务历史打包进来；`approved_scope` 保持非空，且与实际提交内容一致。
+3. 只绑定**本方案实际需要**的材料，不把整个任务历史打包进来。`approved_scope` 是**整个 Task 后续变更白名单**：files 逐项列出拟新增、修改、删除的相对文件路径，可以包括尚未创建的编码、测试、报告和说明文件；summary/components 覆盖实际工作与模块。它不等于本轮材料清单，不能要求“只声明已提交的文件”，也不能仅因当前只上传 PLAN.md 就把范围缩成 PLAN.md。目录和通配符不覆盖子文件。只有原需求确实仅交付文档时，文档白名单才完整。
 4. 材料白名单只覆盖**同 Task 且被显式引用**的 `SOURCE_FILE`/`EVIDENCE`：同 Task 未引用的、以及跨 Task 的材料都不开放。更新方案**不会**改写旧 RR 已冻结的清单——要换材料必须重提方案并在新的 `supporting_artifact_ids` 中引用。
 5. 材料绑定只是引用检查，不代替 Reviewer 实际取件与质量判断；绑定成功不等于方案会通过。
+
+完整语义见 [Plan scope contract](../../contracts/PLAN_SCOPE_CONTRACT.md)。首次提交和修订后，从 Plan 的整个任务交付清单**独立整理** `planned_changed_files`，调用 `get_plan_review_readiness(task_id, planned_changed_files=...)`。不要照抄 scope 掩盖遗漏。处理 `scope_readiness.issues` 和 `missing_planned_files`；未传清单的 `file_coverage=NOT_CHECKED` 不能报告为“范围完整”。查询不会增补权限或消费轮次；已批准任务不得靠查询结果改 scope。
 
 ## 先读取当前状态
 
@@ -44,7 +46,7 @@ allowed-tools: mcp__grokbuddy-hub__get_task mcp__grokbuddy-hub__get_plan_review 
 
 ## 核对后请求 R2
 
-再次调用 `get_plan_review_readiness`，核对每条 Finding 状态和 `next_action`。准备修复的项不得遗漏 accept、证据或 fix；`unready_findings` 列出仍为 OPEN/ACCEPTED 的项，`unbound_fix_evidence` 列出 FIXED 但修复证据尚未绑定到当前方案材料的项。材料绑定只是引用检查，不代替 Reviewer 实际取件和核验。`FIXED` 和 `REJECTED_WITH_EVIDENCE` 在下一轮等 Reviewer verification。
+再次调用 `get_plan_review_readiness`，传入从整个任务交付清单整理的 `planned_changed_files`，核对范围缺项、每条 Finding 状态和 `next_action`。准备修复的项不得遗漏 accept、证据或 fix；`unready_findings` 列出仍为 OPEN/ACCEPTED 的项，`unbound_fix_evidence` 列出 FIXED 但修复证据尚未绑定到当前方案材料的项。材料绑定只是引用检查，不代替 Reviewer 实际取件和核验。`FIXED` 和 `REJECTED_WITH_EVIDENCE` 在下一轮等 Reviewer verification。
 
 `can_request_review` 只表示读取时的基本请求条件；`ready_for_review` 是整改准备提示，均不是授权或 PASS，实际请求继续接受 Hub 全部校验。若 R1 实质问题无法解决，保留问题与证据，不伪造 FIXED；在当前有效授权和剩余轮次内仍可提交 R2 让 Reviewer 判断 BLOCK，准备提示不是禁止这条合法路径的新守卫。
 

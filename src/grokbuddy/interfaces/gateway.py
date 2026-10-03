@@ -20,6 +20,7 @@ TOOL_NAMES = (
     "get_plan_review",
     "get_plan_review_readiness",
     "respond_to_review",
+    "begin_final_fix",
     "submit_artifact",
     "record_workbuddy_message",
     "preflight_final_review",
@@ -164,8 +165,9 @@ class ClientGateway:
         return self._review(payload, "PLAN_REVIEW")
 
     def _get_plan_review_readiness(self, payload):
-        _strict(payload, {"task_id"})
-        return self.hub.get_plan_review_readiness(self.actor_id, _text(payload, "task_id"))
+        _strict(payload, {"task_id"}, {"planned_changed_files"})
+        return self.hub.get_plan_review_readiness(
+            self.actor_id, _text(payload, "task_id"), payload.get("planned_changed_files"))
 
     def _respond_to_review(self, payload):
         _strict(
@@ -190,14 +192,18 @@ class ClientGateway:
         # Plan remediation stays in PLANNING. The application service still
         # enforces state, evidence, active-review, role and CAS guards.
         if action == "fix" and matches[0].get("review_type") != "PLAN_REVIEW":
-            task = self.hub.move(
-                self.actor_id,
-                task_id,
-                "execute",
-                expected_version,
-                _derived_key(key, "begin-remediation"),
-            )
-            expected_version = task["version"]
+            task = self.hub.get_task(task_id)
+            # v2 remediation must have been started explicitly with its frozen
+            # Finding/scope guards. Only legacy Tasks retain automatic execute.
+            if task.get("review_protocol_version") != "v2":
+                task = self.hub.move(
+                    self.actor_id,
+                    task_id,
+                    "execute",
+                    expected_version,
+                    _derived_key(key, "begin-remediation"),
+                )
+                expected_version = task["version"]
         finding = self.hub.respond_finding(
             self.actor_id,
             finding_id,
@@ -207,6 +213,14 @@ class ClientGateway:
             _derived_key(key, "respond-finding"),
         )
         return {"review_id": review_id, "finding": finding, "review_requested": False}
+
+    def _begin_final_fix(self, payload):
+        _strict(payload, {"task_id", "finding_ids", "proposed_scope", "expected_version",
+                          "idempotency_key"})
+        return self.hub.begin_final_fix(
+            self.actor_id, _text(payload, "task_id"), _string_list(payload, "finding_ids"),
+            payload["proposed_scope"], _integer(payload, "expected_version"),
+            _text(payload, "idempotency_key"))
 
     def _submit_artifact(self, payload):
         _strict(

@@ -64,6 +64,39 @@
       ],
       "additionalProperties": false
     },
+    "approved_plan_scope": {
+      "description": "Task-wide change allowlist approved by Plan review, not the submitted Plan material list. Future files need not exist.",
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "summary": { "type": "string", "minLength": 1 },
+        "files": {
+          "description": "Exact relative paths the Task may create, modify or delete. No prefix or wildcard expansion; not a list of frozen review artifacts.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "plan_scope_snapshot_v1": {
+      "description": "Additive context.plan_scope snapshot for newly created v2 Plan RRs. sha256 is the Hub canonical JSON hash of scope. Absent on historical contexts; never reconstructed from current Task state.",
+      "type": "object",
+      "properties": {
+        "schema_version": { "const": 1, "type": "integer" },
+        "scope": { "$ref": "urn:collab:common:v1#/$defs/approved_plan_scope" },
+        "sha256": { "$ref": "urn:collab:common:v1#/$defs/hash" }
+      },
+      "required": [ "schema_version", "scope", "sha256" ],
+      "additionalProperties": false
+    },
     "artifact_ref": {
       "type": "object",
       "properties": {

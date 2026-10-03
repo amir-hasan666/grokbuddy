@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from grokbuddy.domain.model import HubError, PermissionDenied, Role, ReviewType
 from .common import Services, uid, canonical, audit, iso, digest
 from .grok_routing import select_review_delivery_channel
@@ -54,6 +56,14 @@ class ReviewService(Services):
             profile_artifact = self.add_artifact(repo, task_id, actor, 'SOURCE_FILE', canonical(profile['rules']))
             findings = repo.find('review_findings', task_id=task_id)
             context_value = {'findings': findings}
+            if plan and protocol_version == 'v2':
+                scope_snapshot = {'schema_version': 1,
+                                  'scope': deepcopy(task['current_plan_scope']),
+                                  'sha256': task['current_plan_scope_hash']}
+                self.contracts.validate('plan-scope-snapshot', scope_snapshot)
+                if digest(scope_snapshot['scope']) != scope_snapshot['sha256']:
+                    raise HubError('Plan scope hash mismatch')
+                context_value['plan_scope'] = scope_snapshot
             if plan and task.get('current_plan_material_refs'):
                 context_value['supporting_artifacts'] = task['current_plan_material_refs']
                 for item in context_value['supporting_artifacts']:

@@ -4,6 +4,8 @@ Human amendment, 2026-09-23: Plan R1 PASS with no unresolved substantive Finding
 
 The wire verdicts are `PASS`, `NEEDS_CHANGES`, and `BLOCK`; the product label `BLOCKED` corresponds to a second-round effective `BLOCK`. Task Human Gate states are separate. Reviewer identity, asynchronous APPLY, immutable Review/history, Hub authority and input/profile hashes remain required.
 
+The [Plan scope contract](PLAN_SCOPE_CONTRACT.md) separates the Task change allowlist (including future files) from materials needed for the current review. New v2 Plan RR contexts freeze a version-1 scope/hash snapshot. Scope diagnostics do not expand approval or extend the limits below.
+
 | Type | Round | Valid verdict | Task transition | WorkBuddy action |
 | --- | --- | --- | --- | --- |
 | Plan | 1 | PASS | PLAN_APPROVED | Start coding inside the approved Plan scope. |

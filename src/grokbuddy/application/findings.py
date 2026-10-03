@@ -23,6 +23,10 @@ class FindingService(Services):
                 plan_fix = finding.get('review_type') == 'PLAN_REVIEW' and task['state'] == 'PLANNING'
                 if task['state'] != 'EXECUTING' and not plan_fix:
                     raise HubError('Begin the matching remediation before recording a fix')
+                if (task.get('review_protocol_version') == 'v2'
+                        and finding.get('review_type') == 'FINAL_REVIEW'
+                        and finding_id not in (task.get('active_fix_finding_ids') or [])):
+                    raise HubError('Finding is outside the active Final fix scope')
             old = finding['status']
             finding['status'] = finding_transition(old, action, actor['role'])
             finding['version'] += 1

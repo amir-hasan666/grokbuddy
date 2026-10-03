@@ -369,6 +369,7 @@ def test_remote_auth_surface_query_parity_and_no_business_writes(runtime, caplog
                             "submit_plan",
                             "request_plan_review",
                             "respond_to_review",
+                            "begin_final_fix",
                                 "submit_artifact",
                                 "record_workbuddy_message",
                             "request_final_review",
@@ -412,7 +413,7 @@ def test_remote_auth_surface_query_parity_and_no_business_writes(runtime, caplog
     assert "create_task" not in {tool.name for tool in tools.tools}
     assert TOOL_NAMES == (
         "create_task", "get_task", "submit_plan", "request_plan_review",
-        "get_plan_review", "get_plan_review_readiness", "respond_to_review", "submit_artifact",
+        "get_plan_review", "get_plan_review_readiness", "respond_to_review", "begin_final_fix", "submit_artifact",
         "record_workbuddy_message", "preflight_final_review", "request_final_review",
         "get_final_review", "get_task_status", "human_gate_decide", "close_task",
     )

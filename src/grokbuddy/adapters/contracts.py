@@ -22,7 +22,10 @@ class JsonContracts:
 
     def error_path(self, kind, value):
         """Return only a safe schema location, never invalid values or messages."""
-        return self._error_path(self.validators[kind], kind, value)
+        validator = self.validators['common'].evolve(schema={
+            '$ref': 'urn:collab:common:v1#/$defs/plan_scope_snapshot_v1'
+        }) if kind == 'plan-scope-snapshot' else self.validators[kind]
+        return self._error_path(validator, kind, value)
 
     def final_materials_error_path(self, value):
         # Pre-submission fields use the exact package contract. Only the profile

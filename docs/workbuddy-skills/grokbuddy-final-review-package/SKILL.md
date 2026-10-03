@@ -1,19 +1,31 @@
 ---
 name: grokbuddy-final-review-package
-description: 在已授权的 GrokBuddy Hub Task 编码与自测完成后，装配终审材料（差异、真实测试结果、交付文件全文、操作方法与 generated_files），用 preflight_final_review 迭代到 ready=true，核对 changed_files_without_source 后调用 request_final_review 并等待 Hub 实际结果；不创建 Task，不处理方案 Finding，不代替 Reviewer 判定。
-allowed-tools: mcp__grokbuddy-hub__get_task mcp__grokbuddy-hub__get_task_status mcp__grokbuddy-hub__submit_artifact mcp__grokbuddy-hub__preflight_final_review mcp__grokbuddy-hub__request_final_review mcp__grokbuddy-hub__get_final_review
+description: 在已授权的 GrokBuddy Hub Task 中处理终审 R1 整改，通过 begin_final_fix 和正式 Worker 链提交 Finding 修复证据；编码与自测完成后装配终审材料，用 preflight_final_review 检查并请求异步终审。不创建 Task，不处理方案 Finding，不代替 Reviewer 判定。
+allowed-tools: mcp__grokbuddy-hub__get_task mcp__grokbuddy-hub__get_task_status mcp__grokbuddy-hub__respond_to_review mcp__grokbuddy-hub__begin_final_fix mcp__grokbuddy-hub__submit_artifact mcp__grokbuddy-hub__preflight_final_review mcp__grokbuddy-hub__request_final_review mcp__grokbuddy-hub__get_final_review mcp__grokbuddy-worker__list_available_tasks mcp__grokbuddy-worker__get_task mcp__grokbuddy-worker__claim_task mcp__grokbuddy-worker__submit_artifact mcp__grokbuddy-worker__report_progress mcp__grokbuddy-worker__complete_task
 ---
 
 # GrokBuddy 终审材料装配与预检
 
-仅用于本 Task 方案已 `PLAN_APPROVED`、编码与 Worker 自测链已完成的终审阶段。Task ID、版本、RR ID 全部从 Hub 读取；不从自然语言 PASS、GitHub 或其他 Task 推断授权。
+仅用于本 Task 方案已 `PLAN_APPROVED` 的终审及终审整改阶段。Task ID、版本、RR ID 全部从 Hub 读取；不从自然语言 PASS、GitHub 或其他 Task 推断授权。
 
 ## 前置条件
 
-调用 `get_task_status(task_id)`（必要时 `get_task`）确认：`state=EXECUTING`、`approved_plan_id` 非空、无活动 RR。
+调用 `get_task_status(task_id)`（必要时 `get_task`）确认批准方案与范围非空、无活动 RR。`state=FINAL_CHANGES_REQUIRED` 时先走下述整改；`state=EXECUTING` 时核对现有整改工作项和 Worker 完成情况，再装配终审材料。
 
 - 前置不满足 → 不做终审动作，展示 Hub 实际状态并回到相应阶段。
 - 工具缺失 → 报告服务/MCP 版本未就绪，不用脚本、直接 DB、mock 或手动 worker 替代。
+
+## 终审 R1 Finding 整改
+
+1. 读取 R1 `get_final_review` 和 Task 快照，核对稳定 Finding ID、`review_id`、当前状态与 `final_fix_finding_ids`。对本轮要整改的 OPEN 项调用 `respond_to_review(accept)`；已 ACCEPTED 不重复 accept，已 FIXED 先核查证据和工作项，不重复 fix。
+2. 在批准文件/模块范围内整理本次 `proposed_scope`，以最新 Task version 调用 `begin_final_fix(task_id, finding_ids, proposed_scope, expected_version, idempotency_key)`。`finding_ids` 是本次整改的唯一非空集合，必须落在 Hub 冻结的终审 Finding 集合内。
+   - `status=EXECUTING` 才进入整改，保存返回的 assignment ID/generation。该命令不标记 FIXED、不请求审核、不增加轮次。
+   - 超出批准范围会按既有规则返回 `PLAN_CHANGE_REQUIRED`，撤销当前批准并回方案阶段；这不是扩范围授权。调用前自行核对 files/components 子集，不用试错调用扩大权限。
+3. 通过独立 `grokbuddy-worker` 正式工具读取、claim 该新工作项，执行或重新核验实际整改，上传真实 EVIDENCE，`report_progress` 后 `complete_task`。claim/complete 使用 Worker 返回的工作项版本，Hub 写命令使用 Task 版本；不要混用两个版本。此前已上传的文件不等于此新工作项已完成。
+4. 回到 Hub Builder 工具，对相应 ACCEPTED Finding 调用 `respond_to_review(fix)`，绑定当前 Task 的 EVIDENCE/TEST_RESULT/DIFF（包含逐项整改与验证结果，保留 Worker 完成凭据）。每次取最新 Task version；按应用层守卫完成状态变化。不再隐式执行，不用 `begin_execution=true` 替代 `begin_final_fix`。
+5. Worker 完成且本工作项 Finding 已 FIXED 后，重新装配当前差异、自测和交付材料，预检后以 `begin_execution=false` 请求终审 R2。FIXED 是 Builder 声明，独立 Reviewer verification 与 Hub APPLY 才能关闭 Finding；不要承诺 R2 PASS。
+
+不同写命令使用不同稳定键；同一次不确定调用保留相同参数和幂等键重试，先查询已有工作项，不重复启动整改。V1 每阶段最多两轮不变；R2 BLOCKED/Human gate 时展示产物与原因并停止自动推进。
 
 ## 装配终审材料
 

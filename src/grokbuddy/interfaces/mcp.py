@@ -31,7 +31,7 @@ ScopeItem = Annotated[str, Field(min_length=1)]
 
 
 class ApprovedPlanScope(BaseModel):
-    """Structured v2 Plan scope exposed in the WorkBuddy tool schema."""
+    """Task change allowlist, not a list of artifacts submitted for Plan review."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -40,11 +40,15 @@ class ApprovedPlanScope(BaseModel):
 
     # A None default makes each known field optional without allowing an
     # explicit JSON null.  The validator below still rejects an empty object.
-    summary: str = Field(default=None, min_length=1)
+    summary: str = Field(default=None, min_length=1,
+                         description="Work authorized for the whole Task after Plan PASS")
     files: list[ScopeItem] = Field(
-        default=None, min_length=1, json_schema_extra={"uniqueItems": True})
+        default=None, min_length=1, json_schema_extra={"uniqueItems": True},
+        description="Exact relative paths the Task may create, modify or delete, including future files. "
+                    "Not frozen review materials; no directories or wildcard expansion.")
     components: list[ScopeItem] = Field(
-        default=None, min_length=1, json_schema_extra={"uniqueItems": True})
+        default=None, min_length=1, json_schema_extra={"uniqueItems": True},
+        description="Modules covered by the whole Task, not just the Plan document")
 
     @model_validator(mode="after")
     def require_content(self):
@@ -120,7 +124,11 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         idempotency_key: str,
         supporting_artifact_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        """Attach a Plan, structured scope and explicitly referenced source/evidence Artifacts."""
+        """Attach a Plan and Task change allowlist; future files need not exist.
+
+        Bind existing source/evidence needed for this review through supporting_artifact_ids.
+        Those material IDs are separate from approved_scope.files; Plan PASS is required before coding.
+        """
         payload = {
             "task_id": task_id,
             "plan_artifact_id": plan_artifact_id,
@@ -155,9 +163,21 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         return _call(gateway, "get_plan_review", {"review_request_id": review_request_id})
 
     @server.tool(annotations=READ_ONLY)
-    def get_plan_review_readiness(task_id: str) -> dict[str, Any]:
-        """Read Plan findings and preparation checks without creating a review round."""
-        return _call(gateway, "get_plan_review_readiness", {"task_id": task_id})
+    def get_plan_review_readiness(
+        task_id: str,
+        planned_changed_files: Annotated[list[ScopeItem], Field(
+            min_length=1, description="Exact files planned across the Task, derived from Plan deliverables. "
+                                      "Used only for coverage diagnostics; never expands approved scope.")] | None = None,
+    ) -> dict[str, Any]:
+        """Read Plan findings and scope coverage without writing or consuming a round.
+
+        Supply planned_changed_files from the Plan to detect omissions. Without it,
+        file coverage is NOT_CHECKED; the Hub does not infer intent from Markdown or extensions.
+        """
+        fields = {"task_id": task_id}
+        if planned_changed_files is not None:
+            fields["planned_changed_files"] = planned_changed_files
+        return _call(gateway, "get_plan_review_readiness", fields)
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
     def respond_to_review(
@@ -169,7 +189,11 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         idempotency_key: str,
         evidence_artifact_id: str | None = None,
     ) -> dict[str, Any]:
-        """Accept, reject, or fix one stable finding; this never starts a new review."""
+        """Accept, reject, or fix one stable finding; this never starts a new review.
+
+        For v2 Final fixes, first call begin_final_fix and complete the matching
+        Worker remediation. FIXED still requires independent Reviewer verification.
+        """
         payload = {
             "task_id": task_id,
             "review_id": review_id,
@@ -181,6 +205,29 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         if evidence_artifact_id is not None:
             payload["evidence_artifact_id"] = evidence_artifact_id
         return _call(gateway, "respond_to_review", payload)
+
+    @server.tool(annotations=IDEMPOTENT_WRITE)
+    def begin_final_fix(
+        task_id: str,
+        finding_ids: Annotated[list[ScopeItem], Field(
+            min_length=1, json_schema_extra={"uniqueItems": True},
+            description="Stable Finding IDs within this Task's frozen Final fix scope")],
+        proposed_scope: Annotated[ApprovedPlanScope, Field(
+            description="Bounded remediation scope within approved_scope; exceeding it "
+                        "returns PLAN_CHANGE_REQUIRED and revokes the existing approval")],
+        expected_version: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Start a v2 Final remediation and offer its Worker assignment.
+
+        Requires FINAL_CHANGES_REQUIRED, Builder authorization and current Task
+        version. Does not mark Findings FIXED, request review or increase budgets.
+        """
+        return _call(gateway, "begin_final_fix", {
+            "task_id": task_id, "finding_ids": finding_ids,
+            "proposed_scope": proposed_scope.model_dump(exclude_unset=True),
+            "expected_version": expected_version, "idempotency_key": idempotency_key,
+        })
 
     @server.tool(annotations=IDEMPOTENT_WRITE)
     def submit_artifact(
@@ -337,15 +384,16 @@ def create_mcp_server(runtime, actor_id="builder", human_actor_id="human"):
         })
 
     # mcp==2.2.0 otherwise ignores unknown top-level arguments before the
-    # function runs.  Keep submit_plan aligned with ClientGateway._strict and
+    # function runs. Keep structured scope commands aligned with _strict and
     # publish the same additionalProperties:false contract to MCP clients.
-    submit_plan_tool = server._tool_manager.get_tool("submit_plan")
-    if submit_plan_tool is None:  # pragma: no cover - registration invariant
-        raise RuntimeError("submit_plan MCP tool was not registered")
-    argument_model = submit_plan_tool.fn_metadata.arg_model
-    argument_model.model_config["extra"] = "forbid"
-    argument_model.model_rebuild(force=True)
-    submit_plan_tool.parameters = argument_model.model_json_schema(by_alias=True)
+    for name in ("submit_plan", "begin_final_fix"):
+        tool = server._tool_manager.get_tool(name)
+        if tool is None:  # pragma: no cover - registration invariant
+            raise RuntimeError(f"{name} MCP tool was not registered")
+        argument_model = tool.fn_metadata.arg_model
+        argument_model.model_config["extra"] = "forbid"
+        argument_model.model_rebuild(force=True)
+        tool.parameters = argument_model.model_json_schema(by_alias=True)
 
     return server
 

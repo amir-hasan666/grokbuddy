@@ -94,8 +94,9 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 | submit_plan | task_id、plan_artifact_id、approved_scope、expected_version、idempotency_key | task snapshot |
 | request_plan_review | task_id、expected_version、idempotency_key | RR ID、PENDING |
 | get_plan_review | RR ID | RR status、result/null |
-| get_plan_review_readiness | task_id | 只读方案 Finding、Task version、剩余轮次与整改准备提示；不创建 RR |
+| get_plan_review_readiness | task_id、可选 planned_changed_files | 只读方案 Finding、scope 文件覆盖、Task version、剩余轮次与整改准备提示；不创建 RR |
 | respond_to_review | task_id、review_id、finding_id、action、证据、version、key | Finding 收据；不自动重审 |
+| begin_final_fix | task_id、finding_ids、proposed_scope、expected_version、idempotency_key | v2 终审整改收据和 Worker assignment；超范围返回 PLAN_CHANGE_REQUIRED |
 | submit_artifact | task_id、type、text/base64、key | immutable artifact metadata |
 | request_final_review | task、测试/差异 Artifact、final package 摘要、version、key | RR ID、PENDING |
 | get_final_review | RR ID | RR status、result/findings |
@@ -103,6 +104,12 @@ MCP/HTTP/CLI → `ClientGateway` → Application Service → Domain。MCP 不拥
 | close_task | task_id、reason、version、key | Human audit + CANCELLED |
 
 `request_plan_review` / `request_final_review` 只提交 durable request 并返回 `PENDING`；完成结果只能通过 `get_*` 查询。相同 command idempotency key 在 stdio 进程重启后返回同一 Task/ReviewRequest，不创建新轮次。
+
+### 终审 R1 整改入口（2026-10-03，本地维护）
+
+`begin_final_fix` 是现有 Application 命令的增量公开入口，适用于协议 v2、`FINAL_CHANGES_REQUIRED` 的已授权 Builder。Gateway/stdio MCP（以及共用 Gateway 的 HTTP/CLI）转交现有身份、Task CAS、冻结 Finding 集合和 scope 子集守卫，返回现有 `EXECUTING + task + assignment` 或 `PLAN_CHANGE_REQUIRED + task`。不新增机器字段，不改协议版本或两轮预算；历史协议 v1 保留旧自动 execute 行为。公开 Remote MCP 仍只读，独立 Worker MCP 不增加此命令；客户端通过工具发现确认能力，旧客户端工具缓存须重新加载。
+
+v2 `respond_to_review(fix)` 不再自动执行：必须先 `begin_final_fix`，完成新 Worker assignment，再提交修复证据。一次整改可包含多条 Finding，后续逐条 fix 不重复启动执行。详细顺序见 [终审技能](workbuddy-skills/grokbuddy-final-review-package/SKILL.md)，现场恢复模板见 [WorkBuddy 续办提示词](WORKBUDDY_FINAL_FIX_RESUME_PROMPT.md)。超范围仍撤销当前批准、回方案阶段，不提供免审增补；V1 轮次上限不变。当前状态仅为本地维护，不代表已部署或真实终审验收通过。
 
 ### 方案 R1 Finding 整改与 R2 准备（2026-10-02，本地维护）
 
@@ -115,6 +122,8 @@ Builder 的方案整改顺序为：读取 R1 结果与当前 Finding → `respon
 活动 RR 期间只查询。FIXED/REJECTED_WITH_EVIDENCE 等待独立 Reviewer 的 verification，仍属未关闭项；修改方案不会自动 FIXED，FIXED 不会自动 PASS。R2 已超时则保留旧 RR 和 Human Gate；现行 V1 合同没有同 Task 的“新 R2”，也不允许 Continue/Modify/预算自动形成 R3。
 
 `submit_plan` 的 `approved_scope` 是必填的非空结构化对象，只允许 `summary`、`files`、`components`；至少提供一项，`files/components` 如出现则必须是非空字符串数组。Plan Artifact 上传时 `artifact_type` 必须使用大写 `PLAN`。MCP 调用示例：
+
+该 scope 是整个 Task 后续允许新增、修改、删除的文件/模块范围，**不是本轮冻结审核材料清单**。files 可以包含尚未创建的编码文件，方案 PASS 前仍不创建业务代码。本轮依赖的已有源码/证据用 supporting_artifact_ids 绑定。首次提交及修订后，从 Plan 的任务交付清单独立整理 planned_changed_files，传给 get_plan_review_readiness；未传时文件覆盖为 NOT_CHECKED。完整版本与兼容边界见 [Plan scope contract](contracts/PLAN_SCOPE_CONTRACT.md)。
 
 ```json
 {

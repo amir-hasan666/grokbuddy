@@ -95,7 +95,9 @@ def validate_contracts() -> None:
         data = json.loads(path.read_text(encoding='utf-8'))
         kind = 'review-request' if path.stem.endswith('request') else (
             'final-package' if path.stem == 'final-package' else 'review-result')
-        validator = validators[kind]
+        validator = (validators['common'].evolve(schema={
+            '$ref': 'urn:collab:common:v1#/$defs/plan_scope_snapshot_v1'})
+            if path.stem == 'plan-scope-snapshot' else validators[kind])
         fixtures[path.stem] = (data, validator)
         errors = list(validator.iter_errors(data))
         check('positive:' + path.stem, not errors, '; '.join(e.message for e in errors))
@@ -148,6 +150,15 @@ def validate_contracts() -> None:
     # Ensure refs actually constrain nested evidence/identity rather than silently accepting.
     reject('final-result', 'nested-evidence-id', lambda d: d['findings'][0]['evidence'].__setitem__('artifact_id', '../secret'))
     reject('final-result', 'nested-reviewer-unknown-field', lambda d: d['reviewer'].__setitem__('is_human', True))
+    reject('plan-scope-snapshot', 'unknown-plan-scope-version',
+           lambda d: d.__setitem__('schema_version', 2))
+    reject('plan-scope-snapshot', 'empty-plan-scope', lambda d: d.__setitem__('scope', {}))
+    reject('plan-scope-snapshot', 'unknown-plan-scope-field',
+           lambda d: d['scope'].__setitem__('supporting_artifact_ids', []))
+    reject('plan-scope-snapshot', 'empty-plan-scope-files',
+           lambda d: d['scope'].__setitem__('files', []))
+    reject('plan-scope-snapshot', 'duplicate-plan-scope-files',
+           lambda d: d['scope'].__setitem__('files', ['app/main.py', 'app/main.py']))
 
 
 def main() -> int:

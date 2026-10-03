@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "scope": {
+    "summary": "Build the WCAUTOASK app after Plan PASS",
+    "files": ["WCAUTOASK/app/main.py", "WCAUTOASK/scripts/phase0_probe.py"],
+    "components": ["app", "phase0"]
+  },
+  "sha256": "24ce37a3c73cf6f6b745aee010b56bf9da4a10be1b3fd22e93d84af4bf536b8b"
+}

@@ -50,6 +50,51 @@ def _display_file_path(path):
             and all(part not in ('', '.', '..') for part in path.split('/')))
 
 
+def _plan_scope_readiness(task, planned_changed_files):
+    """Check declared paths, never infer Task intent from Markdown or extensions."""
+    if planned_changed_files is not None:
+        if (not isinstance(planned_changed_files, list) or not planned_changed_files
+                or any(not _display_file_path(path) or '*' in path or '?' in path
+                       or path != path.strip() for path in planned_changed_files)
+                or len(set(planned_changed_files)) != len(planned_changed_files)):
+            raise HubError('planned_changed_files must contain unique exact relative file paths')
+    applicable = task.get('review_protocol_version') == 'v2'
+    scope = task.get('current_plan_scope') or {}
+    scope_hash = task.get('current_plan_scope_hash')
+    files = scope.get('files', [])
+    issues = []
+
+    def issue(code, field, message):
+        issues.append({'error_code': code, 'field_path': field, 'message': message})
+
+    if applicable:
+        if not scope or not scope_hash:
+            issue('PLAN_SCOPE_MISSING', '$.approved_scope',
+                  'Submit a structured Task change allowlist, separate from review materials')
+        elif digest(scope) != scope_hash:
+            issue('PLAN_SCOPE_HASH_MISMATCH', '$.current_plan_scope_hash',
+                  'Current Plan scope does not match its stored hash')
+        if not files:
+            issue('PLAN_SCOPE_FILES_MISSING', '$.approved_scope.files',
+                  'Declare the files the Task will create, modify or delete; future files need not exist')
+        elif any(not _display_file_path(path) or '*' in path or '?' in path
+                 or path != path.strip() for path in files):
+            issue('PLAN_SCOPE_FILES_NOT_EXACT', '$.approved_scope.files',
+                  'Final changes require exact relative file paths, not directories or wildcards')
+    missing = (sorted(set(planned_changed_files) - set(files))
+               if applicable and planned_changed_files is not None else [])
+    if missing:
+        issue('PLAN_SCOPE_FILES_INCOMPLETE', '$.approved_scope.files',
+              'Planned changes exceed the submitted allowlist; correct the Plan before requesting review')
+    checked = applicable and planned_changed_files is not None
+    return {'schema_version': 1, 'applicable': applicable,
+            'scope_semantics': 'task_change_allowlist', 'scope_sha256': scope_hash,
+            'planned_files_checked': checked, 'missing_planned_files': missing,
+            'file_coverage': ('INCOMPLETE' if missing else 'COMPLETE') if checked else 'NOT_CHECKED',
+            'ready': not issues, 'issues': issues,
+            'not_checked': ['plan_body_semantics'] + ([] if checked else ['planned_file_coverage'])}
+
+
 _RESTRICTED_TEXT = re.compile(
     r"(?im)^\s*authorization\s*:|(?:secret|token|password|api[_-]?key)\s*[:=]"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+\S+"
@@ -193,11 +238,12 @@ class TaskService(Services):
         with self.db.transaction() as repo:
             return repo.find('review_findings', task_id=task_id)
 
-    def get_plan_review_readiness(self, actor_id, task_id):
+    def get_plan_review_readiness(self, actor_id, task_id, planned_changed_files=None):
         """A Builder-scoped, read-only preparation hint; request guards remain authoritative."""
         with self.db.transaction() as repo:
             actor = self.actor(repo, actor_id, Role.BUILDER)
             task = self.task_for(repo, task_id, actor, live=False)
+            scope_readiness = _plan_scope_readiness(task, planned_changed_files)
             requests = repo.find('review_requests', task_id=task_id, review_type='PLAN_REVIEW')
             current_round = max((request['review_round'] for request in requests), default=0)
             limit = task['plan_limit']
@@ -255,7 +301,8 @@ class TaskService(Services):
                 'next_review_round': current_round + 1, 'round_limit': limit,
                 'rounds_remaining': max(0, limit - current_round),
                 'checks': checks, 'can_request_review': can_request,
-                'ready_for_review': can_request and not unready and not unbound,
+                'ready_for_review': can_request and not unready and not unbound and scope_readiness['ready'],
+                'scope_readiness': scope_readiness,
                 'unready_findings': unready, 'unbound_fix_evidence': unbound, 'findings': findings,
             }
 

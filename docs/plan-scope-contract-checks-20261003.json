@@ -1,0 +1,9 @@
+{
+  "scope": "PLAN_SCOPE_HANDOFF_LOCAL_CONTRACT_CHECKS",
+  "total": 283,
+  "passed": 283,
+  "failed": 0,
+  "failures": [],
+  "production_validation": "NOT_RUN",
+  "fixture_example_scope_sha256": "24ce37a3c73cf6f6b745aee010b56bf9da4a10be1b3fd22e93d84af4bf536b8b"
+}
